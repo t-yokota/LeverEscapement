@@ -148,7 +148,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             _thickness = inputs.addValueInput('thickness', 'Wheel Thickness', _units, adsk.core.ValueInput.createByReal(float(thickness)))
 
-            _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter', '', 1, True)
+            # _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter', '', 1, True)
 
             _errMessage = inputs.addTextBoxCommandInput('errMessage', '', '', 2, True)
             _errMessage.isFullWidth = True
@@ -455,12 +455,13 @@ class WheelAndPallets:
         lineOQ.isConstruction = True
 
     def drawWheel(self):
-         # Define a matrix for rotation.
+        # Define a matrix for rotation.
         transform = adsk.core.Matrix3D.create()
 
-        # Draw the face of wheel teeth.
-        wheelAxisHoleCircle  = self.__wheelSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__holeDiam/2)
+        # Draw the hole for wheel axis.
+        wheelAxisHole  = self.__wheelSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__holeDiam/2)
 
+        # Draw the face of wheel teeth.
         transform.setToRotation(math.radians(-24), self.__normal, self.__points.R)
         self.__points.X = adsk.core.Point3D.create(self.__points.A.x, self.__points.A.y, self.__points.A.z)
         self.__points.X.transformBy(transform)
@@ -503,7 +504,8 @@ class WheelAndPallets:
         # Define a matrix for rotation.
         transform = adsk.core.Matrix3D.create()
 
-        palletAxisHoleCIrcle = self.__palletSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.O, self.__holeDiam/2)
+        # Draw the hole for pallet axis.
+        palletAxisHole = self.__palletSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.O, self.__holeDiam/2)
 
         # Draw the face of enter pallet.
         enterPalletInclineFace = self.__palletSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.P)
