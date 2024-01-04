@@ -122,6 +122,9 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             if thicknessAttrib:
                 thickness = thicknessAttrib.value
 
+            wheelAndPallets = WheelAndPallets(des, int(numTeeth), float(lockingDiam), float(holeDiam), float(thickness))
+            majorDiam = str(round(wheelAndPallets.getMajorDiameterOfWheel()*10, 3)) + " mm"
+
             cmd = eventArgs.command
             cmd.isExecutedWhenPreEmpted = False
             inputs = cmd.commandInputs
@@ -148,7 +151,9 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             _thickness = inputs.addValueInput('thickness', 'Wheel Thickness', _units, adsk.core.ValueInput.createByReal(float(thickness)))
 
-            # _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter', '', 1, True)
+            _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter', majorDiam, 1, True)
+
+            # TBA _palletRollerPivotDistance = inputs.addValueInput('palletRollerPivotDistance', 'Distance between pallet pivot and safety roller pivot', _units, adsk.core.ValueInput.createByReal(float()))
 
             _errMessage = inputs.addTextBoxCommandInput('errMessage', '', '', 2, True)
             _errMessage.isFullWidth = True
@@ -201,9 +206,7 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             # create the pallet and escape wheel.
             # drawWheelAndPallet(des, numTeeth, lockingDiam, holeDiam, thickness)
             wheelAndPallets = WheelAndPallets(des, numTeeth, lockingDiam, holeDiam, thickness)
-            wheelAndPallets.drawConstructions()
-            wheelAndPallets.drawWheel()
-            wheelAndPallets.drawPallets()
+            wheelAndPallets.draw()
 
         except:
             if _ui:
@@ -219,26 +222,32 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
             eventArgs = adsk.core.InputChangedEventArgs.cast(args)
             changedInput = eventArgs.input
 
-            global _units
-            if changedInput.id == 'standard':
-                if _standard.selectedItem.name == 'English':
-                    _units = 'in'
-                elif _standard.selectedItem.name == 'Metric':
-                    _units = 'mm'
+            # global _units
+            # if changedInput.id == 'standard':
+            #     if _standard.selectedItem.name == 'English':
+            #         _units = 'in'
+            #     elif _standard.selectedItem.name == 'Metric':
+            #         _units = 'mm'
 
-                # Set each one to it's current value because otherwised if the user
-                # has edited it, the value won't update in the dialog because
-                # apparently it remembers the units when the value was edited.
-                # Setting the value using the API resets this.
-                _lockingDiam.value = _lockingDiam.value
-                _lockingDiam.unitType = _units
-                _holeDiam.value = _holeDiam.value
-                _holeDiam.unitType = _units
-                _thickness.value = _thickness.value
-                _thickness.unitType = _units
+            #     # Set each one to it's current value because otherwised if the user
+            #     # has edited it, the value won't update in the dialog because
+            #     # apparently it remembers the units when the value was edited.
+            #     # Setting the value using the API resets this.
+            #     _lockingDiam.value = _lockingDiam.value
+            #     _lockingDiam.unitType = _units
+            #     _holeDiam.value = _holeDiam.value
+            #     _holeDiam.unitType = _units
+            #     _thickness.value = _thickness.value
+            #     _thickness.unitType = _units
 
             # Update the major diameter value.
-            ## TBA
+            if changedInput.id == 'lockingDiam':
+                try:
+                    des = adsk.fusion.Design.cast(_app.activeProduct)
+                    wheelAndPallets = WheelAndPallets(des, _numTeeth.text, _lockingDiam.value, _holeDiam.value, _thickness.value)
+                    _majorDiam.text = str(round(wheelAndPallets.getMajorDiameterOfWheel()*10, 3))+" mm"
+                except:
+                    _majorDiam.text = " mm"
 
         except:
             if _ui:
@@ -253,6 +262,7 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
 #         try:
 #             ## TBA
 
+
 class WheelAndPallets:
     def __init__(self, design, numTeeth, lockingDiam, holeDiam, thickness):
         self.__design = design
@@ -262,7 +272,15 @@ class WheelAndPallets:
         self.__thickness = thickness
 
         self.__points = Points()
+        self.__getPointsForDrawing()
 
+    def draw(self):
+        self.createSketches()
+        self.drawConstructions()
+        self.drawWheel()
+        self.drawPallets()
+
+    def createSketches(self):
         # Get occurences in the root component.
         self.__occs = self.__design.rootComponent.occurrences
 
@@ -286,194 +304,196 @@ class WheelAndPallets:
         self.__wheelSketch.name = "escape wheel"
         self.__palletSketch.name = "pallet"
 
-        # Define a normal vector for rotation axis.
-        self.__normal = self.__baseSketch.xDirection.crossProduct(self.__baseSketch.yDirection)
+        # Define a normal vector for rotation.
+        self.__normal = self.__baseSketch.referencePlane.geometry.normal
         self.__normal.transformBy(self.__baseSketch.transform)
 
-    def drawConstructions(self):
-        # Define a matrix for rotation.
+    def getPivotDistance(self):
+        return (self.__lockingDiam/2.0)/math.cos(math.radians(30.0))
+
+    def getMajorDiameterOfWheel(self):
+        return self.__points.A.vectorTo(self.__points.J).length*2
+
+    def __getIntersectionPoint(self, point1, point2, point3, point4):
+        vector1to2 = point1.vectorTo(point2)
+        vector3to4 = point3.vectorTo(point4)
+        vector3to1 = point3.vectorTo(point1)
+        crossProduct = vector3to4.crossProduct(vector1to2)
+
+        if crossProduct.length > 0:
+            scalar = vector3to1.crossProduct(vector3to4).length / vector3to4.crossProduct(vector1to2).length
+            vector1toInts = vector1to2.copy()
+            vector1toInts.scaleBy(scalar)
+            intersectionPoint = point1.copy()
+            intersectionPoint.translateBy(vector1toInts)
+            return intersectionPoint
+        else:
+            None
+
+    def __getPointsForDrawing(self):
+        # Define a matrix and a normal vector for rotation.
         transform = adsk.core.Matrix3D.create()
+        normal = adsk.core.Vector3D.create(0, 0, 1)
 
-        # Draw a line AO as center line.
-        self.__points.A = adsk.core.Point3D.create(0, 0, 0) # pivot of the wheel.
-        self.__points.O = adsk.core.Point3D.create(0, (self.__lockingDiam/2.0)/math.cos(math.radians(30.0)), 0) # pivot of the pallet.
-        lineAO = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.O)
-        lineAO.isConstruction = True
+        # Get a Wheel pivot.
+        self.__points.A = adsk.core.Point3D.create(0, 0, 0)
 
-        # Draw a locking circle.
-        lockingCircle = self.__baseSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__lockingDiam/2)
-        lockingCircle.isConstruction = True
+        # Get a Pallet pivot.
+        self.__points.O = self.__points.A.copy()
+        self.__points.O.translateBy(adsk.core.Vector3D.create(0, self.getPivotDistance(), 0))
 
-        # Draw a line OD.
-        transform.setToRotation(math.radians(-60), self.__normal, self.__points.O)
-        self.__points.D = adsk.core.Point3D.create(self.__points.A.x, self.__points.A.y, self.__points.A.z)
+        # Get a point D.
+        transform.setToRotation(math.radians(-60), normal, self.__points.O)
+        self.__points.D = self.__points.A.copy()
         self.__points.D.transformBy(transform)
-        lineOD = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.D)
-        lineOD.isConstruction = True
 
-        # Draw a line OE.
-        transform.setToRotation(math.radians(60), self.__normal, self.__points.O)
-        self.__points.E = adsk.core.Point3D.create(self.__points.A.x, self.__points.A.y, self.__points.A.z)
+        # Get a point E.
+        transform.setToRotation(math.radians(60), normal, self.__points.O)
+        self.__points.E = self.__points.A.copy()
         self.__points.E.transformBy(transform)
-        lineOE = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.E)
-        lineOE.isConstruction = True
 
-        # Draw a line AC.
-        transform.setToRotation(math.radians(-29), self.__normal, self.__points.A)
-        self.__points.C = adsk.core.Point3D.create(self.__points.O.x, self.__points.O.y, self.__points.O.z)
-        self.__points.C.transformBy(transform)
-        lineAC = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.C)
-        lineAC.isConstruction = True
-
-        # Draw a line AT.
-        transform.setToRotation(math.radians(-7), self.__normal, self.__points.A)
-        self.__points.T = adsk.core.Point3D.create(self.__points.C.x, self.__points.C.y, self.__points.C.z)
-        self.__points.T.transformBy(transform)
-        lineAT = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.T)
-        lineAT.isConstruction = True
-
-        # Draw a line AY.
-        transform.setToRotation(math.radians(-4), self.__normal, self.__points.A)
-        self.__points.Y = adsk.core.Point3D.create(self.__points.T.x, self.__points.T.y, self.__points.T.z)
-        self.__points.Y.transformBy(transform)
-        lineAY = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.Y)
-        lineAY.isConstruction = True
-
-        # Draw a line OK.
-        transform.setToRotation(math.radians(10), self.__normal, self.__points.O)
-        self.__points.K = adsk.core.Point3D.create(self.__points.E.x, self.__points.E.y, self.__points.E.z)
-        self.__points.K.transformBy(transform)
-        lineOK = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.K)
-        lineOK.isConstruction = True
-
-        # Draw an arc HL.
-        self.__points.L = lineAC.geometry.intersectWithCurve(lineOE.geometry)[0]
-        arcHL = self.__baseSketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.O, self.__points.L, math.radians(30))
-        arcHL.isConstruction = True
-
-        # Draw a line FG.
-        self.__points.G = lineOK.geometry.intersectWithCurve(arcHL.geometry)[0]
-        transform.setToRotation(math.radians(90), self.__normal, self.__points.G)
-        inputEntities = adsk.core.ObjectCollection.create()
-        inputEntities.add(lineOK)
-        copiedEntities = self.__baseSketch.copy(inputEntities, transform) # create a temporary line of FG perpendicular to the line OK.
-        tempLineFG = next((entity for entity in copiedEntities if isinstance(entity, adsk.fusion.SketchLine)), None) # get the line from copied entity.
-
-        transform.setToRotation(math.radians(-2), self.__normal, self.__points.O)
-        inputEntities = adsk.core.ObjectCollection.create()
-        inputEntities.add(lineOK)
-        copiedEntities = self.__baseSketch.copy(inputEntities, transform) # create a temporary line of OF for getting point F.
-        tempLineOF = next((entity for entity in copiedEntities if isinstance(entity, adsk.fusion.SketchLine)), None) # get the line from copied entity.
-
-        self.__points.F = tempLineOF.geometry.intersectWithCurve(tempLineFG.geometry)[0] # get the point F as intersection of 2 temporary lines.
-        tempLineFG.deleteMe()
-        tempLineOF.deleteMe()
-        lineOF = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.F)
-        lineOF.isConstruction = True
-        lineFG = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.G)
-        lineFG.isConstruction = True
-
-        # Draw a line Fa, for incline of the pallet.
-        self.__points.a = lineAY.geometry.intersectWithCurve(lockingCircle.geometry)[0]
-        lineFa = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.a)
-        lineFa.isConstruction = True
-
-        # Draw a major circle.
-        self.__points.J = lineAT.geometry.intersectWithCurve(lineFa.geometry)[0]
-        self.__baseSketch.sketchPoints.add(self.__points.J)
-        self.__majorRadius = math.sqrt((self.__points.J.x - self.__points.A.x)**2+(self.__points.J.y - self.__points.A.y)**2+(self.__points.J.z - self.__points.A.z)**2)
-        majorCircle = self.__baseSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__majorRadius)
-        majorCircle.isConstruction = True
-
-        # Draw a line AB.
-        transform.setToRotation(math.radians(31), self.__normal, self.__points.A)
-        self.__points.B = adsk.core.Point3D.create(0, self.__majorRadius, 0)
+        # Get a point B.
+        transform.setToRotation(math.radians(31), normal, self.__points.A)
+        self.__points.B = self.__points.O.copy()
         self.__points.B.transformBy(transform)
-        lineAB = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.B)
-        lineAB.isConstruction = True
 
-        # Draw a line AM.
-        transform.setToRotation(math.radians(-7), self.__normal, self.__points.A)
-        self.__points.M = adsk.core.Point3D.create(self.__points.B.x, self.__points.B.y, self.__points.B.z)
+        # Get a point C.
+        transform.setToRotation(math.radians(-29), normal, self.__points.A)
+        self.__points.C = self.__points.O.copy()
+        self.__points.C.transformBy(transform)
+
+        # Get a point T.
+        transform.setToRotation(math.radians(-7), normal, self.__points.A)
+        self.__points.T = self.__points.C.copy()
+        self.__points.T.transformBy(transform)
+
+        # Get a point Y.
+        transform.setToRotation(math.radians(-4), normal, self.__points.A)
+        self.__points.Y = self.__points.T.copy()
+        self.__points.Y.transformBy(transform)
+
+        # Get a temporary point F.
+        transform.setToRotation(math.radians(8), normal, self.__points.O)
+        self.__points.__F = self.__points.E.copy()
+        self.__points.__F.transformBy(transform)
+
+        # Get a point K.
+        transform.setToRotation(math.radians(2), normal, self.__points.O)
+        self.__points.K = self.__points.__F.copy()
+        self.__points.K.transformBy(transform)
+
+        # Get a point L.
+        transform.setToRotation(math.radians(-29), normal, self.__points.A.copy())
+        self.__points.L = self.__points.A.copy()
+        self.__points.L.translateBy(adsk.core.Vector3D.create(0, self.__lockingDiam/2, 0))
+        self.__points.L.transformBy(transform)
+
+        # Get a point G.
+        angleEOL = self.__points.O.vectorTo(self.__points.E).dotProduct(self.__points.O.vectorTo(self.__points.L))
+        angleEOL = angleEOL/(self.__points.O.vectorTo(self.__points.E).length*self.__points.O.vectorTo(self.__points.L).length)
+        angleEOL = math.degrees(math.acos(angleEOL))
+        transform.setToRotation(math.radians(10+angleEOL), normal, self.__points.O)
+        self.__points.G = self.__points.L.copy()
+        self.__points.G.transformBy(transform)
+
+        # Get a point F.
+        scalar = self.__points.O.vectorTo(self.__points.G).length/math.cos(math.radians(2.0))
+        vector = self.__points.O.vectorTo(self.__points.__F)
+        vector.normalize()
+        vector.scaleBy(scalar)
+        self.__points.F = self.__points.O.copy()
+        self.__points.F.translateBy(vector)
+
+        # Get a point a.
+        transform.setToRotation(math.radians(-40), normal, self.__points.A)
+        self.__points.a = self.__points.A.copy()
+        self.__points.a.translateBy(adsk.core.Vector3D.create(0, self.__lockingDiam/2, 0))
+        self.__points.a.transformBy(transform)
+
+        # Get a point J.
+        self.__points.J = self.__getIntersectionPoint(self.__points.A, self.__points.T, self.__points.F, self.__points.a)
+
+        # Get a point M.
+        transform.setToRotation(math.radians(-7), normal, self.__points.A)
+        self.__points.M = self.__points.B.copy()
         self.__points.M.transformBy(transform)
-        lineAM = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.M)
-        lineAM.isConstruction = True
 
-        # Draw a line AN.
-        transform.setToRotation(math.radians(4), self.__normal, self.__points.A)
-        self.__points.N = adsk.core.Point3D.create(self.__points.B.x, self.__points.B.y, self.__points.B.z)
-        self.__points.N.transformBy(transform)
-        lineAN = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.N)
-        lineAN.isConstruction = True
+        # Get a temporary point N.
+        transform.setToRotation(math.radians(4), normal, self.__points.A)
+        self.__points.__N = self.__points.B.copy()
+        self.__points.__N.transformBy(transform)
 
-        # Draw an arc VP (but point P isn't defined yet).
-        self.__points.V = lineOD.geometry.intersectWithCurve(lineAM.geometry)[0]
-        arcVP = self.__baseSketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.O, self.__points.V, math.radians(30))
-        arcVP.isConstruction = True
+        # Get a point N.
+        scalar = self.getMajorDiameterOfWheel()/2
+        vector = self.__points.A.vectorTo(self.__points.__N)
+        vector.normalize()
+        vector.scaleBy(scalar)
+        self.__points.N = self.__points.A.copy()
+        self.__points.N.translateBy(vector)
 
-        # Define a point P by using the arc VP, and draw a line OP.
-        transform.setToRotation(math.radians(10), self.__normal, self.__points.O)
-        inputEntities = adsk.core.ObjectCollection.create()
-        inputEntities.add(lineOD)
-        copiedEntities = self.__baseSketch.copy(inputEntities, transform) # create a temporary line of OP for getting point P.
-        tempLineOP = next((entity for entity in copiedEntities if isinstance(entity, adsk.fusion.SketchLine)), None) # get the line from copied entity.
+        # Get a point V.
+        self.__points.V = self.__getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.M)
 
-        self.__points.P = tempLineOP.geometry.intersectWithCurve(arcVP.geometry)[0]
-        tempLineOP.deleteMe()
+        # Get a point P.
+        transform.setToRotation(math.radians(10), normal, self.__points.O)
+        self.__points.P = self.__points.V.copy()
+        self.__points.P.transformBy(transform)
 
-        lineOP = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.P)
-        lineOP.isConstruction = True
+        # Get a point R.
+        self.__points.R = self.__getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.B)
 
-        # Draw a line RW.
-        self.__points.R = lineOD.geometry.intersectWithCurve(lineAB.geometry)[0]
-        vectorOD = adsk.core.Vector3D.create(self.__points.D.x - self.__points.O.x, self.__points.D.y - self.__points.O.y, self.__points.D.z - self.__points.O.z)
-        vectorPerpendicularOD = adsk.core.Vector3D.create(vectorOD.y, -vectorOD.x, vectorOD.z)
-        vectorPerpendicularOD.scaleBy(0.1)
+        # Get a point W.
+        transform.setToRotation(math.radians(90), normal, self.__points.R)
+        vector = self.__points.R.vectorTo(self.__points.O)
+        vector.normalize()
+        vector.scaleBy(0.5)
+        vector.transformBy(transform)
+        self.__points.W = self.__points.R.copy()
+        self.__points.W.translateBy(vector)
 
-        self.__points.W = adsk.core.Point3D.create(self.__points.R.x + vectorPerpendicularOD.x, self.__points.R.y + vectorPerpendicularOD.y, self.__points.R.z + vectorPerpendicularOD.z)
-        lineRW = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.R, self.__points.W)
-        lineRW.isConstruction = True
+        # Get a temporary point R.
+        transform.setToRotation(math.radians(-90), normal, self.__points.R)
+        vector = self.__points.R.vectorTo(self.__points.O)
+        vector.transformBy(transform)
+        self.__points.__R = self.__points.R.copy()
+        self.__points.__R.translateBy(vector)
 
-        # Draw a line OQ.
-        transform.setToRotation(math.radians(2), self.__normal, self.__points.O)
-        inputEntities = adsk.core.ObjectCollection.create()
-        inputEntities.add(lineOD)
-        copiedEntities = self.__baseSketch.copy(inputEntities, transform) # create a temporary line of OQ for getting point Q.
-        tempLineOQ = next((entity for entity in copiedEntities if isinstance(entity, adsk.fusion.SketchLine)), None) # get the line from copied entity.
+        transform.setToRotation(math.radians(-13.5), normal, self.__points.R)
+        self.__points.__R.transformBy(transform)
 
-        transform.setToRotation(math.radians(-13.5-90), self.__normal, self.__points.R)
-        inputEntities = adsk.core.ObjectCollection.create()
-        inputEntities.add(lineOD)
-        copiedEntities = self.__baseSketch.copy(inputEntities, transform) # create a temporary line of enter pallet for getting point Q.
-        tempEnterPalletLockingFace = next((entity for entity in copiedEntities if isinstance(entity, adsk.fusion.SketchLine)), None) # get the line from copied entity.
+        # Get a temporary point W.
+        self.__points.__W = self.__points.W.copy()
+        self.__points.__W.transformBy(transform)
 
-        self.__points.Q = tempLineOQ.geometry.intersectWithCurve(tempEnterPalletLockingFace.geometry)[0]
-        tempEnterPalletLockingFace.deleteMe()
-        tempLineOQ.deleteMe()
+        # Get a temporary point Q.
+        transform.setToRotation(math.radians(2), normal, self.__points.O)
+        self.__points.__Q = self.__points.D.copy()
+        self.__points.__Q.transformBy(transform)
 
-        lineOQ = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.Q)
-        lineOQ.isConstruction = True
+        # Get a point Q.
+        self.__points.Q = self.__getIntersectionPoint(self.__points.__W, self.__points.__R, self.__points.__Q, self.__points.O)
 
     def drawWheel(self):
         # Define a matrix for rotation.
         transform = adsk.core.Matrix3D.create()
 
-        # Draw the hole for wheel axis.
-        wheelAxisHole  = self.__wheelSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__holeDiam/2)
+        # Draw the hole for wheel pivot.
+        wheelPivotHole  = self.__wheelSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__holeDiam/2)
+        # normal = adsk.core.Vector3D.create(0, 0, 1)
 
         # Draw the face of wheel teeth.
         transform.setToRotation(math.radians(-24), self.__normal, self.__points.R)
-        self.__points.X = adsk.core.Point3D.create(self.__points.A.x, self.__points.A.y, self.__points.A.z)
+        self.__points.X = self.__points.A.copy()
         self.__points.X.transformBy(transform)
         wheelTeethInclineFace = self.__wheelSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.N, self.__points.R)
         tempWheelTeethLockingFace = self.__wheelSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.R, self.__points.X)
-        tempWheelTeethLockingFace.isConstruction = True
+        # tempWheelTeethLockingFace.isConstruction = True
 
-        teethRootRadius = self.__majorRadius*2/3
+        teethRootRadius = self.getMajorDiameterOfWheel()/3
         teethRootCircle = self.__wheelSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, teethRootRadius)
         teethRootCircle.isConstruction = True
 
-        self.__points.Z = tempWheelTeethLockingFace.geometry.intersectWithCurve(teethRootCircle.geometry)[0]
+        self.__points.Z = tempWheelTeethLockingFace.geometry.intersectWithCurve(teethRootCircle.geometry).item(0)
         wheelTeethLockingFace = self.__wheelSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.R, self.__points.Z)
         tempWheelTeethLockingFace.deleteMe()
 
@@ -504,15 +524,14 @@ class WheelAndPallets:
         # Define a matrix for rotation.
         transform = adsk.core.Matrix3D.create()
 
-        # Draw the hole for pallet axis.
-        palletAxisHole = self.__palletSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.O, self.__holeDiam/2)
+        # Draw the hole for pallet pivot.
+        palletPivotHole = self.__palletSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.O, self.__holeDiam/2)
 
         # Draw the face of enter pallet.
         enterPalletInclineFace = self.__palletSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.P)
 
         transform.setToRotation(math.radians(-13.5), self.__normal, self.__points.R)
-        vectorRW = adsk.core.Vector3D.create(self.__points.W.x - self.__points.R.x, self.__points.W.y - self.__points.R.y, self.__points.W.z - self.__points.R.z)
-        vectorEnterPalletLockingFace = adsk.core.Vector3D.create(vectorRW.x, vectorRW.y, vectorRW.z)
+        vectorEnterPalletLockingFace = self.__points.R.vectorTo(self.__points.W)
         vectorEnterPalletLockingFace.transformBy(transform)
         vectorEnterPalletLockingFace.normalize()
         enterPalletLockingFace = self.__palletSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, adsk.core.Point3D.create(self.__points.Q.x + vectorEnterPalletLockingFace.x,
@@ -526,8 +545,7 @@ class WheelAndPallets:
         exitPalletInclineFace = self.__palletSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.J)
 
         transform.setToRotation(math.radians(-15), self.__normal, self.__points.F)
-        vectorFG = adsk.core.Vector3D.create(self.__points.G.x - self.__points.F.x, self.__points.G.y - self.__points.F.y, self.__points.G.z - self.__points.F.z)
-        vectorExitPalletLockingFace = adsk.core.Vector3D.create(vectorFG.x, vectorFG.y, vectorFG.z)
+        vectorExitPalletLockingFace = self.__points.F.vectorTo(self.__points.G)
         vectorExitPalletLockingFace.transformBy(transform)
         vectorExitPalletLockingFace.normalize()
         exitPalletLockingFace = self.__palletSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, adsk.core.Point3D.create(self.__points.F.x + vectorExitPalletLockingFace.x,
@@ -536,3 +554,83 @@ class WheelAndPallets:
         exitPalletAnotherFace = self.__palletSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.J, adsk.core.Point3D.create(self.__points.J.x + vectorExitPalletLockingFace.x,
                                                                                                                                       self.__points.J.y + vectorExitPalletLockingFace.y,
                                                                                                                                       self.__points.J.z + vectorExitPalletLockingFace.z))
+
+    def drawConstructions(self):
+        # Draw a line AO as center line.
+        lineAO = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.O)
+        lineAO.isConstruction = True
+
+        # Draw a locking circle.
+        lockingCircle = self.__baseSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__lockingDiam/2)
+        lockingCircle.isConstruction = True
+
+        # Draw a line OD.
+        lineOD = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.D)
+        lineOD.isConstruction = True
+
+        # Draw a line OE.
+        lineOE = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.E)
+        lineOE.isConstruction = True
+
+        # Draw a line AC.
+        lineAC = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.C)
+        lineAC.isConstruction = True
+
+        # Draw a line AT.
+        lineAT = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.T)
+        lineAT.isConstruction = True
+
+        # Draw a line AY.
+        lineAY = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.Y)
+        lineAY.isConstruction = True
+
+        # Draw a line OK.
+        lineOK = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.K)
+        lineOK.isConstruction = True
+
+        # Draw an arc HL.
+        arcHL = self.__baseSketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.O, self.__points.L, math.radians(30))
+        arcHL.isConstruction = True
+
+        # Draw a line FG.
+        lineOF = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.F)
+        lineOF.isConstruction = True
+
+        lineFG = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.G)
+        lineFG.isConstruction = True
+
+        # Draw a line Fa, for incline of the pallet.
+        lineFa = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.a)
+        lineFa.isConstruction = True
+
+        # Draw a major circle.
+        majorRadius = self.getMajorDiameterOfWheel()/2
+        majorCircle = self.__baseSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, majorRadius)
+        majorCircle.isConstruction = True
+
+        # Draw a line AB.
+        lineAB = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.B)
+        lineAB.isConstruction = True
+
+        # Draw a line AM.
+        lineAM = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.M)
+        lineAM.isConstruction = True
+
+        # Draw a line AN.
+        lineAN = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.N)
+        lineAN.isConstruction = True
+
+        # Draw an arc VP.
+        arcVP = self.__baseSketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.O, self.__points.V, math.radians(30))
+        arcVP.isConstruction = True
+
+        lineOP = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.P)
+        lineOP.isConstruction = True
+
+        # Draw a line RW.
+        lineRW = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.R, self.__points.W)
+        lineRW.isConstruction = True
+
+        # Draw a line OQ.
+        lineOQ = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.Q)
+        lineOQ.isConstruction = True
