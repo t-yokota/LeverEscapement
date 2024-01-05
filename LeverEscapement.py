@@ -16,14 +16,14 @@ _lockingDiam = adsk.core.ValueCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
 _thickness = adsk.core.ValueCommandInput.cast(None)
 _majorDiam = adsk.core.TextBoxCommandInput.cast(None)
-_wheelPalletsPivotDist = adsk.core.TextBoxCommandInput.cast(None)
-_palletsRollerPivotDist = adsk.core.ValueCommandInput.cast(None)
+_pivotDistBetweenWheelAndPallets = adsk.core.TextBoxCommandInput.cast(None)
+_pivotDistBetweenLeverAndRoller = adsk.core.ValueCommandInput.cast(None)
+_leverWidth = adsk.core.ValueCommandInput.cast(None)
+_rollerAngleRaitoToLeverAngle = adsk.core.ValueCommandInput.cast(None)
+_balanceRollerDiamRaitoToSatefyRollerDiam = adsk.core.ValueCommandInput.cast(None)
 _errMessage = adsk.core.TextBoxCommandInput.cast(None)
 
 _handlers = []
-
-class Points:
-    pass
 
 def run(context):
     try:
@@ -34,7 +34,7 @@ def run(context):
         cmdDef = _ui.commandDefinitions.itemById('adskLeverEscapementPythonScript')
         if not cmdDef:
             # Create a command definition.
-            cmdDef = _ui.commandDefinitions.addButtonDefinition('adskLeverEscapementPythonScript', 'Lever Escapement', 'Creates an escape wheel and a pallet fork component.', 'resources/LeverEscapement')
+            cmdDef = _ui.commandDefinitions.addButtonDefinition('adskLeverEscapementPythonScript', 'Lever Escapement', 'Creates components for an escape wheel, a pallet lever, and a balance roller.', 'resources/LeverEscapement')
 
         # Connect to the command created event.
         onCommandCreated = EscapementCommandCreatedHandler()
@@ -107,21 +107,34 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             wheelAndPallets = WheelAndPallets(des, int(numTeeth), float(lockingDiam), float(holeDiam), float(thickness))
             majorDiam = str(round(wheelAndPallets.getMajorDiameterOfWheel()*10, 3)) + " mm"
 
-            wheelPalletsPivotDist = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
+            pivotDistBetweenWheelAndPallets = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
 
-            palletsRollerPivotDist = str(wheelAndPallets.getPivotDistance())
-            palletsRollerPivotDistAttrib = des.attributes.itemByName('LeverEscapement', 'palletRollerPivotDist')
-            if palletsRollerPivotDistAttrib:
-                palletsRollerPivotDist = palletsRollerPivotDistAttrib.value
+            pivotDistBetweenLeverAndRoller = str(wheelAndPallets.getPivotDistance())
+            pivotDistBetweenLeverAndRollerAttrib = des.attributes.itemByName('LeverEscapement', 'pivotDistBetweenLeverAndRoller')
+            if pivotDistBetweenLeverAndRollerAttrib:
+                pivotDistBetweenLeverAndRoller = pivotDistBetweenLeverAndRollerAttrib.value
+
+            leverWidth = '0.4'
+            leverWidthAttrib = des.attributes.itemByName('LeverEscapement', 'leverWidth')
+            if leverWidthAttrib:
+                leverWidthAttrib = leverWidthAttrib.value
+
+            rollerAngleRaitoToLeverAngle = '3'
+            rollerAngleRaitoToLeverAngleAttrib = des.attributes.itemByName('LeverEscapement', 'rollerAngleRaitoToLeverAngle')
+            if rollerAngleRaitoToLeverAngleAttrib:
+                rollerAngleRaitoToLeverAngleAttrib = rollerAngleRaitoToLeverAngleAttrib.value
+
+            balanceRollerDiamRaitoToSatefyRollerDiam = '2'
+            balanceRollerDiamRaitoToSatefyRollerDiamAttrib = des.attributes.itemByName('LeverEscapement', 'balanceRollerDiamRaitoToSatefyRollerDiam')
 
             cmd = eventArgs.command
             cmd.isExecutedWhenPreEmpted = False
             inputs = cmd.commandInputs
 
-            global _description, _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam, _wheelPalletsPivotDist, _palletsRollerPivotDist, _errMessage
+            global _description, _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam, _pivotDistBetweenWheelAndPallets, _pivotDistBetweenLeverAndRoller, _leverWidth, _rollerAngleRaitoToLeverAngle, _balanceRollerDiamRaitoToSatefyRollerDiam, _errMessage
 
             # Define the command dialog.
-            _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Escape wheel and Pallets:</b>', 2, True)
+            _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Escape wheel and the Pallets:</b>', 2, True)
             _description.isFullWidth = True
 
             _numTeeth = inputs.addTextBoxCommandInput('numTeeth', 'Number of Teeth', numTeeth, 1, True)
@@ -134,12 +147,18 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter', majorDiam, 1, True)
 
-            _wheelPalletsPivotDist = inputs.addTextBoxCommandInput('wheelPalletsPivotDist', 'Distance between a wheel pivot and a pallets pivot', wheelPalletsPivotDist, 1, True)
+            _pivotDistBetweenWheelAndPallets = inputs.addTextBoxCommandInput('pivotDistBetweenWheelAndPallets', 'Distance between a wheel pivot and a pallets(lever) pivot', pivotDistBetweenWheelAndPallets, 1, True)
 
-            _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Safety roller and the Fork:</b>', 2, True)
+            _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Lever and the Roller:</b>', 2, True)
             _description.isFullWidth = True
 
-            _palletsRollerPivotDist = inputs.addValueInput('palletRollerPivotDist', 'Distance between a pallets pivot and a safety roller pivot', _units, adsk.core.ValueInput.createByReal(float(palletsRollerPivotDist)))
+            _pivotDistBetweenLeverAndRoller = inputs.addValueInput('pivotDistBetweenLeverAndRoller', 'Distance between a pallets(lever) pivot and a roller pivot', _units, adsk.core.ValueInput.createByReal(float(pivotDistBetweenLeverAndRoller)))
+
+            _leverWidth = inputs.addValueInput('leverWidth', 'Width of the lever', _units, adsk.core.ValueInput.createByReal(float(leverWidth)))
+
+            _rollerAngleRaitoToLeverAngle = inputs.addValueInput('rollerAngleRaitoToLeverAngle', 'Raito of the roller angle to the lever angle', '', adsk.core.ValueInput.createByReal(float(rollerAngleRaitoToLeverAngle)))
+
+            _balanceRollerDiamRaitoToSatefyRollerDiam = inputs.addValueInput('balanceRollerDiamRaitoToSatefyRollerDiam', 'Raito of the balance roller diameter to the safety roller diameter', '', adsk.core.ValueInput.createByReal(float(balanceRollerDiamRaitoToSatefyRollerDiam)))
 
             _errMessage = inputs.addTextBoxCommandInput('errMessage', '', '', 2, True)
             _errMessage.isFullWidth = True
@@ -182,18 +201,28 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
             attribs.add('LeverEscapement', 'holeDiam', str(_holeDiam.value))
             attribs.add('LeverEscapement', 'thickness', str(_thickness.value))
-            attribs.add('LeverEscapement', 'palletRollerPivotDist', str(_palletsRollerPivotDist.value))
+            attribs.add('LeverEscapement', 'pivotDistBetweenLeverAndRoller', str(_pivotDistBetweenLeverAndRoller.value))
+            attribs.add('LeverEscapement', 'leverWidth', str(_leverWidth.value))
+            attribs.add('LeverEscapement', 'rollerAngleRaitoToLeverAngle', str(_rollerAngleRaitoToLeverAngle.value))
+            attribs.add('LeverEscapement', 'rollerAngleRaitoToLeverAngle', str(_balanceRollerDiamRaitoToSatefyRollerDiam.value))
 
             numTeeth = int(_numTeeth.text)
             lockingDiam = _lockingDiam.value
             holeDiam = _holeDiam.value
             thickness = _thickness.value
-            palletsRollerPivotDist = _palletsRollerPivotDist.value
+            pivotDistBetweenLeverAndRoller = _pivotDistBetweenLeverAndRoller.value
+            leverWidth = _leverWidth.value
+            rollerAngleRaitoToLeverAngle = _rollerAngleRaitoToLeverAngle.value
+            balanceRollerDiamRaitoToSatefyRollerDiam = _balanceRollerDiamRaitoToSatefyRollerDiam.value
 
             # create the pallet and escape wheel.
             # drawWheelAndPallet(des, numTeeth, lockingDiam, holeDiam, thickness)
             wheelAndPallets = WheelAndPallets(des, numTeeth, lockingDiam, holeDiam, thickness)
             wheelAndPallets.draw()
+
+            pivotDistBetweenWheelAndPallets = wheelAndPallets.getPivotDistance()
+            leverAndRoller = LeverAndRoller(des, pivotDistBetweenLeverAndRoller, leverWidth, rollerAngleRaitoToLeverAngle, balanceRollerDiamRaitoToSatefyRollerDiam, pivotDistBetweenWheelAndPallets)
+            leverAndRoller.draw()
 
         except:
             if _ui:
@@ -215,13 +244,13 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                     des = adsk.fusion.Design.cast(_app.activeProduct)
                     wheelAndPallets = WheelAndPallets(des, _numTeeth.text, _lockingDiam.value, _holeDiam.value, _thickness.value)
                     _majorDiam.text = str(round(wheelAndPallets.getMajorDiameterOfWheel()*10, 3))+" mm"
-                    _wheelPalletsPivotDist.text = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
-                    if _palletsRollerPivotDist.value < wheelAndPallets.getPivotDistance():
-                        _palletsRollerPivotDist.value = wheelAndPallets.getPivotDistance()
+                    _pivotDistBetweenWheelAndPallets.text = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
+                    if _pivotDistBetweenLeverAndRoller.value < wheelAndPallets.getPivotDistance():
+                        _pivotDistBetweenLeverAndRoller.value = wheelAndPallets.getPivotDistance()
                 except:
                     _majorDiam.text = " mm"
-                    _wheelPalletsPivotDist.text = " mm"
-                    _palletsRollerPivotDist.value = 0.0
+                    _pivotDistBetweenWheelAndPallets.text = " mm"
+                    _pivotDistBetweenLeverAndRoller.value = 0.0
 
         except:
             if _ui:
@@ -236,8 +265,27 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
 #         try:
 #             ## TBA
 
+class Points:
+    def __init__(self):
+        pass
 
-class WheelAndPallets:
+    def getIntersectionPoint(self, point1, point2, point3, point4):
+        vector1to2 = point1.vectorTo(point2)
+        vector3to4 = point3.vectorTo(point4)
+        vector3to1 = point3.vectorTo(point1)
+        crossProduct = vector3to4.crossProduct(vector1to2)
+
+        if crossProduct.length > 0:
+            scalar = vector3to1.crossProduct(vector3to4).length / vector3to4.crossProduct(vector1to2).length
+            vector1toInts = vector1to2.copy()
+            vector1toInts.scaleBy(scalar)
+            intersectionPoint = point1.copy()
+            intersectionPoint.translateBy(vector1toInts)
+            return intersectionPoint
+        else:
+            None
+
+class WheelAndPallets():
     def __init__(self, design, numTeeth, lockingDiam, holeDiam, thickness):
         self.__design = design
         self.__numTeeth = numTeeth
@@ -267,7 +315,7 @@ class WheelAndPallets:
         self.__palletComp = adsk.fusion.Component.cast(self.__palletOcc.component)
 
         self.__wheelComp.name = "escape wheel"
-        self.__palletComp.name = "pallet"
+        self.__palletComp.name = "pallets"
 
         # Create new sketches in each component.
         self.__baseSketch = self.__wheelComp.sketches.add(self.__wheelComp.xYConstructionPlane)
@@ -276,7 +324,7 @@ class WheelAndPallets:
 
         self.__baseSketch.name = "constructions"
         self.__wheelSketch.name = "escape wheel"
-        self.__palletSketch.name = "pallet"
+        self.__palletSketch.name = "pallets"
 
         # Define a normal vector for rotation.
         self.__normal = self.__baseSketch.referencePlane.geometry.normal
@@ -287,22 +335,6 @@ class WheelAndPallets:
 
     def getMajorDiameterOfWheel(self):
         return self.__points.A.vectorTo(self.__points.J).length*2
-
-    def __getIntersectionPoint(self, point1, point2, point3, point4):
-        vector1to2 = point1.vectorTo(point2)
-        vector3to4 = point3.vectorTo(point4)
-        vector3to1 = point3.vectorTo(point1)
-        crossProduct = vector3to4.crossProduct(vector1to2)
-
-        if crossProduct.length > 0:
-            scalar = vector3to1.crossProduct(vector3to4).length / vector3to4.crossProduct(vector1to2).length
-            vector1toInts = vector1to2.copy()
-            vector1toInts.scaleBy(scalar)
-            intersectionPoint = point1.copy()
-            intersectionPoint.translateBy(vector1toInts)
-            return intersectionPoint
-        else:
-            None
 
     def __getPointsForDrawing(self):
         # Define a matrix and a normal vector for rotation.
@@ -385,7 +417,7 @@ class WheelAndPallets:
         self.__points.a.transformBy(transform)
 
         # Get a point J.
-        self.__points.J = self.__getIntersectionPoint(self.__points.A, self.__points.T, self.__points.F, self.__points.a)
+        self.__points.J = self.__points.getIntersectionPoint(self.__points.A, self.__points.T, self.__points.F, self.__points.a)
 
         # Get a point M.
         transform.setToRotation(math.radians(-7), normal, self.__points.A)
@@ -406,7 +438,7 @@ class WheelAndPallets:
         self.__points.N.translateBy(vector)
 
         # Get a point V.
-        self.__points.V = self.__getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.M)
+        self.__points.V = self.__points.getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.M)
 
         # Get a point P.
         transform.setToRotation(math.radians(10), normal, self.__points.O)
@@ -414,7 +446,7 @@ class WheelAndPallets:
         self.__points.P.transformBy(transform)
 
         # Get a point R.
-        self.__points.R = self.__getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.B)
+        self.__points.R = self.__points.getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.B)
 
         # Get a point W.
         transform.setToRotation(math.radians(90), normal, self.__points.R)
@@ -445,7 +477,7 @@ class WheelAndPallets:
         self.__points.__Q.transformBy(transform)
 
         # Get a point Q.
-        self.__points.Q = self.__getIntersectionPoint(self.__points.__W, self.__points.__R, self.__points.__Q, self.__points.O)
+        self.__points.Q = self.__points.getIntersectionPoint(self.__points.__W, self.__points.__R, self.__points.__Q, self.__points.O)
 
     def drawWheel(self):
         # Define a matrix for rotation.
@@ -608,3 +640,97 @@ class WheelAndPallets:
         # Draw a line OQ.
         lineOQ = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.Q)
         lineOQ.isConstruction = True
+
+class LeverAndRoller(Points):
+    def __init__(self, design, pivotDistBetweenLeverAndRoller, leverWidth, rollerAngleRaitoToLeverAngle, balanceRollerDiamRaitoToSatefyRollerDiam, pivotDistBetweenWheelAndPallets):
+        self.__design = design
+        self.__pivotDistBetweenLeverAndRoller = pivotDistBetweenLeverAndRoller
+        self.__leverWidth = leverWidth
+        self.__rollerAngleRaitoToLeverAngle = rollerAngleRaitoToLeverAngle
+        self.__balanceRollerDiamRaitoToSatefyRollerDiam = balanceRollerDiamRaitoToSatefyRollerDiam
+        self.__pivotDistBetweenWheelAndPallets = pivotDistBetweenWheelAndPallets
+
+        self.__points = Points()
+        self.__getPointsForDrawing()
+
+    def draw(self):
+        self.createSketches()
+        self.drawConstructions()
+        # self.drawRoller()
+        # self.drawLever()
+
+    def createSketches(self):
+        # Get occurences in the root component.
+        self.__occs = self.__design.rootComponent.occurrences
+
+        # Add new components to the occurences.
+        self.__leverOcc = self.__occs.addNewComponent(adsk.core.Matrix3D.create())
+        self.__rollerOcc = self.__occs.addNewComponent(adsk.core.Matrix3D.create())
+
+        # Get objects of new compornents.
+        self.__leverComp = adsk.fusion.Component.cast(self.__leverOcc.component)
+        self.__rollerComp = adsk.fusion.Component.cast(self.__rollerOcc.component)
+
+        self.__leverComp.name = "lever"
+        self.__rollerComp.name = "roller"
+
+        # Create new sketches in each component.
+        self.__baseSketch = self.__leverComp.sketches.add(self.__leverComp.xYConstructionPlane)
+        self.__leverSketch =  self.__leverComp.sketches.add(self.__leverComp.xYConstructionPlane)
+        self.__rollerSketch = self.__rollerComp.sketches.add(self.__rollerComp.xYConstructionPlane)
+
+        self.__baseSketch.name = "constructions"
+        self.__leverSketch.name = "lever"
+        self.__rollerSketch.name = "roller"
+
+        # Define a normal vector for rotation.
+        self.__normal = self.__baseSketch.referencePlane.geometry.normal
+        self.__normal.transformBy(self.__baseSketch.transform)
+
+    def __getPointsForDrawing(self):
+        # Define a matrix and a normal vector for rotation.
+        transform = adsk.core.Matrix3D.create()
+        normal = adsk.core.Vector3D.create(0, 0, 1)
+
+        self.__points.O = adsk.core.Point3D.create(0, 0, 0)
+        self.__points.O.translateBy(adsk.core.Vector3D.create(0, self.__pivotDistBetweenWheelAndPallets, 0))
+
+        self.__points.A = self.__points.O.copy()
+        self.__points.A.translateBy(adsk.core.Vector3D.create(0, self.__pivotDistBetweenLeverAndRoller, 0))
+
+        transform.setToRotation(math.radians(5), normal, self.__points.O)
+        self.__points.B = self.__points.A.copy()
+        self.__points.B.transformBy(transform)
+
+        transform.setToRotation(math.radians(-5*self.__rollerAngleRaitoToLeverAngle), normal, self.__points.A)
+        self.__points.C = self.__points.O.copy()
+        self.__points.C.transformBy(transform)
+
+        self.__points.D = self.__points.getIntersectionPoint(self.__points.O, self.__points.B, self.__points.A, self.__points.C)
+
+    def drawConstructions(self):
+        lineAO = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.O)
+        lineAO.isConstruction = True
+
+        lineOB = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.B)
+        lineOB.isConstruction = True
+
+        lineAC = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.C)
+        lineAC.isConstruction = True
+
+        balanceRollerRadius = self.__points.A.vectorTo(self.__points.D).length
+        balanceRollerCircle = self.__baseSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, balanceRollerRadius)
+        balanceRollerCircle.isConstruction = True
+
+        safetyRollerRadius = balanceRollerRadius/self.__balanceRollerDiamRaitoToSatefyRollerDiam
+        safetyRollerCircle = self.__baseSketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, safetyRollerRadius)
+        safetyRollerCircle.isConstruction = True
+
+        # lineAD = self.__baseSketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.D)
+        # lineAD.isConstruction = True
+
+    def drawRoller():
+        pass
+
+    def drawLever():
+        pass
