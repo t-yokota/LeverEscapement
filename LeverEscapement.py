@@ -125,14 +125,18 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             wheelAndPallets = WheelAndPallets(des, int(numTeeth), float(lockingDiam), float(holeDiam), float(thickness))
             majorDiam = str(round(wheelAndPallets.getMajorDiameterOfWheel()*10, 3)) + " mm"
 
+            wheelPalletsPivotDist = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
+
+            palletsRollerPivotDist = str(wheelAndPallets.getPivotDistance())
+
             cmd = eventArgs.command
             cmd.isExecutedWhenPreEmpted = False
             inputs = cmd.commandInputs
 
-            global _description, _standard, _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam, _errMessage
+            global _description, _standard, _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam, _wheelPalletsPivotDist, _palletsRollerPivotDist, _errMessage
 
             # Define the command dialog.
-            _description = inputs.addTextBoxCommandInput('description', '', '', 2, True)
+            _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Escape wheel and Pallets:</b>', 2, True)
             _description.isFullWidth = True
 
             _standard = inputs.addDropDownCommandInput('standard', 'Standard', adsk.core.DropDownStyles.TextListDropDownStyle)
@@ -153,7 +157,12 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter', majorDiam, 1, True)
 
-            # TBA _palletRollerPivotDistance = inputs.addValueInput('palletRollerPivotDistance', 'Distance between pallet pivot and safety roller pivot', _units, adsk.core.ValueInput.createByReal(float()))
+            _wheelPalletsPivotDist = inputs.addTextBoxCommandInput('wheelPalletsPivotDist', 'Distance between a wheel pivot and a pallets pivot', wheelPalletsPivotDist, 1, True)
+
+            _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Safety roller and the Fork:</b>', 2, True)
+            _description.isFullWidth = True
+
+            _palletsRollerPivotDist = inputs.addValueInput('palletRollerPivotDist', 'Distance between a pallets pivot and a safety roller pivot', _units, adsk.core.ValueInput.createByReal(float(palletsRollerPivotDist)))
 
             _errMessage = inputs.addTextBoxCommandInput('errMessage', '', '', 2, True)
             _errMessage.isFullWidth = True
@@ -203,6 +212,8 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             holeDiam = _holeDiam.value
             thickness = _thickness.value
 
+            palletsRollerPivotDist = _palletsRollerPivotDist.value
+
             # create the pallet and escape wheel.
             # drawWheelAndPallet(des, numTeeth, lockingDiam, holeDiam, thickness)
             wheelAndPallets = WheelAndPallets(des, numTeeth, lockingDiam, holeDiam, thickness)
@@ -246,8 +257,13 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                     des = adsk.fusion.Design.cast(_app.activeProduct)
                     wheelAndPallets = WheelAndPallets(des, _numTeeth.text, _lockingDiam.value, _holeDiam.value, _thickness.value)
                     _majorDiam.text = str(round(wheelAndPallets.getMajorDiameterOfWheel()*10, 3))+" mm"
+                    _wheelPalletsPivotDist.text = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
+                    if _palletsRollerPivotDist.value < wheelAndPallets.getPivotDistance():
+                        _palletsRollerPivotDist.value = wheelAndPallets.getPivotDistance()
                 except:
                     _majorDiam.text = " mm"
+                    _wheelPalletsPivotDist.text = " mm"
+                    _palletsRollerPivotDist.value = 0.0
 
         except:
             if _ui:
