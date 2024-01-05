@@ -11,7 +11,6 @@ _units = ''
 
 # Command inputs
 _description = adsk.core.TextBoxCommandInput.cast(None)
-_standard = adsk.core.DropDownCommandInput.cast(None)
 _numTeeth = adsk.core.TextBoxCommandInput.cast(None)
 _lockingDiam = adsk.core.ValueCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
@@ -81,29 +80,10 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 _ui.messageBox('A Fusion design must be active when invoking this command.')
                 return()
 
-            defaultUnits = des.unitsManager.defaultLengthUnits
-
-            # Determine whether to use inches or millimeters as the intial default.
             global _units
-            if defaultUnits == 'in' or defaultUnits == 'ft':
-                _units = 'in'
-            else:
-                _units = 'mm'
+            _units = 'mm'
 
             # Define the default values and get the previous values from the attributes.
-            if _units == 'in':
-                standard = 'English'
-            else:
-                standard = 'Metric'
-            standardAttrib = des.attributes.itemByName('LeverEscapement', 'standard')
-            if standardAttrib:
-                standard = standardAttrib.value
-
-            if standard == 'English':
-                _units = 'in'
-            else:
-                _units = 'mm'
-
             numTeeth = '15'
             numTeethAttrib = des.attributes.itemByName('LeverEscapement', 'numTeeth')
             if numTeethAttrib:
@@ -138,19 +118,11 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             cmd.isExecutedWhenPreEmpted = False
             inputs = cmd.commandInputs
 
-            global _description, _standard, _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam, _wheelPalletsPivotDist, _palletsRollerPivotDist, _errMessage
+            global _description, _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam, _wheelPalletsPivotDist, _palletsRollerPivotDist, _errMessage
 
             # Define the command dialog.
             _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Escape wheel and Pallets:</b>', 2, True)
             _description.isFullWidth = True
-
-            _standard = inputs.addDropDownCommandInput('standard', 'Standard', adsk.core.DropDownStyles.TextListDropDownStyle)
-            if standard == "English":
-                _standard.listItems.add('English', True)
-                _standard.listItems.add('Metric', False)
-            else:
-                _standard.listItems.add('English', False)
-                _standard.listItems.add('Metric', True)
 
             _numTeeth = inputs.addTextBoxCommandInput('numTeeth', 'Number of Teeth', numTeeth, 1, True)
 
@@ -206,7 +178,6 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             # Save the current values as attributes.
             des = adsk.fusion.Design.cast(_app.activeProduct)
             attribs = des.attributes
-            attribs.add('LeverEscapement', 'standard', _standard.selectedItem.name)
             attribs.add('LeverEscapement', 'numTeeth', _numTeeth.text)
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
             attribs.add('LeverEscapement', 'holeDiam', str(_holeDiam.value))
@@ -237,24 +208,6 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
         try:
             eventArgs = adsk.core.InputChangedEventArgs.cast(args)
             changedInput = eventArgs.input
-
-            # global _units
-            # if changedInput.id == 'standard':
-            #     if _standard.selectedItem.name == 'English':
-            #         _units = 'in'
-            #     elif _standard.selectedItem.name == 'Metric':
-            #         _units = 'mm'
-
-            #     # Set each one to it's current value because otherwised if the user
-            #     # has edited it, the value won't update in the dialog because
-            #     # apparently it remembers the units when the value was edited.
-            #     # Setting the value using the API resets this.
-            #     _lockingDiam.value = _lockingDiam.value
-            #     _lockingDiam.unitType = _units
-            #     _holeDiam.value = _holeDiam.value
-            #     _holeDiam.unitType = _units
-            #     _thickness.value = _thickness.value
-            #     _thickness.unitType = _units
 
             # Update the major diameter value.
             if changedInput.id == 'lockingDiam':
