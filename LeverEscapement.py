@@ -17,6 +17,8 @@ _lockingDiam = adsk.core.ValueCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
 _thickness = adsk.core.ValueCommandInput.cast(None)
 _majorDiam = adsk.core.TextBoxCommandInput.cast(None)
+_wheelPalletsPivotDist = adsk.core.TextBoxCommandInput.cast(None)
+_palletsRollerPivotDist = adsk.core.ValueCommandInput.cast(None)
 _errMessage = adsk.core.TextBoxCommandInput.cast(None)
 
 _handlers = []
@@ -128,6 +130,9 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             wheelPalletsPivotDist = str(round(wheelAndPallets.getPivotDistance()*10, 3)) + "mm"
 
             palletsRollerPivotDist = str(wheelAndPallets.getPivotDistance())
+            palletsRollerPivotDistAttrib = des.attributes.itemByName('LeverEscapement', 'palletRollerPivotDist')
+            if palletsRollerPivotDistAttrib:
+                palletsRollerPivotDist = palletsRollerPivotDistAttrib.value
 
             cmd = eventArgs.command
             cmd.isExecutedWhenPreEmpted = False
@@ -206,12 +211,12 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
             attribs.add('LeverEscapement', 'holeDiam', str(_holeDiam.value))
             attribs.add('LeverEscapement', 'thickness', str(_thickness.value))
+            attribs.add('LeverEscapement', 'palletRollerPivotDist', str(_palletsRollerPivotDist.value))
 
             numTeeth = int(_numTeeth.text)
             lockingDiam = _lockingDiam.value
             holeDiam = _holeDiam.value
             thickness = _thickness.value
-
             palletsRollerPivotDist = _palletsRollerPivotDist.value
 
             # create the pallet and escape wheel.
