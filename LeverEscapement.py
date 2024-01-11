@@ -14,7 +14,6 @@ _description = adsk.core.TextBoxCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
 _numTeeth = adsk.core.TextBoxCommandInput.cast(None)
 _lockingDiam = adsk.core.ValueCommandInput.cast(None)
-_thickness = adsk.core.ValueCommandInput.cast(None)
 _majorDiam = adsk.core.TextBoxCommandInput.cast(None)
 _pivotDistBetweenWheelAndPallets = adsk.core.TextBoxCommandInput.cast(None)
 _pivotDistBetweenLeverAndRoller = adsk.core.ValueCommandInput.cast(None)
@@ -102,11 +101,6 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             if lockingDiamAttrib:
                 lockingDiam = lockingDiamAttrib.value
 
-            thickness = '1'
-            thicknessAttrib = des.attributes.itemByName('LeverEscapement', 'thickness')
-            if thicknessAttrib:
-                thickness = thicknessAttrib.value
-
             leverWidth = '0.4'
             leverWidthAttrib = des.attributes.itemByName('LeverEscapement', 'leverWidth')
             if leverWidthAttrib:
@@ -139,7 +133,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 'holeDiam' : float(holeDiam)
             }
 
-            wheelAndPallets = WheelAndPallets(int(numTeeth), float(lockingDiam), float(thickness), **commonParams)
+            wheelAndPallets = WheelAndPallets(int(numTeeth), float(lockingDiam), **commonParams)
 
             pivotDistBetweenWheelAndPallets = str(round(wheelAndPallets.getPivotDistance()*10, 3))
 
@@ -165,7 +159,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             inputs = cmd.commandInputs
 
             global _description
-            global _numTeeth, _lockingDiam, _holeDiam, _thickness, _majorDiam
+            global _numTeeth, _lockingDiam, _holeDiam, _majorDiam
             global _pivotDistBetweenWheelAndPallets, _pivotDistBetweenLeverAndRoller, _leverWidth
             global _rollerAngleRaitoToLeverAngle, _leverAngle, _rollerAngle
             global _impulsePinAngle, _impulsePinDiam
@@ -188,8 +182,6 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _lockingDiam = inputs.addValueInput('lockingDiam', 'Locking Diameter', _units, adsk.core.ValueInput.createByReal(float(lockingDiam)))
 
             _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter [mm]', majorDiam, 1, True)
-
-            _thickness = inputs.addValueInput('thickness', 'Wheel Thickness', _units, adsk.core.ValueInput.createByReal(float(thickness)))
 
             _pivotDistBetweenWheelAndPallets = inputs.addTextBoxCommandInput('pivotDistBetweenWheelAndPallets', 'Pivot Distance (Wheel to Pallets) [mm]', pivotDistBetweenWheelAndPallets, 1, True)
 
@@ -256,7 +248,6 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             attribs = des.attributes
             # attribs.add('LeverEscapement', 'numTeeth', _numTeeth.text)
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
-            attribs.add('LeverEscapement', 'thickness', str(_thickness.value))
             attribs.add('LeverEscapement', 'pivotDistBetweenLeverAndRoller', str(_pivotDistBetweenLeverAndRoller.value))
             attribs.add('LeverEscapement', 'leverWidth', str(_leverWidth.value))
             attribs.add('LeverEscapement', 'rollerAngleRaitoToLeverAngle', str(_rollerAngleRaitoToLeverAngle.value))
@@ -267,7 +258,6 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
 
             numTeeth = int(_numTeeth.text)
             lockingDiam = _lockingDiam.value
-            thickness = _thickness.value
             pivotDistBetweenLeverAndRoller = _pivotDistBetweenLeverAndRoller.value
             leverWidth = _leverWidth.value
             rollerAngleRaitoToLeverAngle = _rollerAngleRaitoToLeverAngle.value
@@ -283,7 +273,7 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
                 'holeDiam' : holeDiam
             }
 
-            wheelAndPallets = WheelAndPallets(numTeeth, lockingDiam, thickness, **commonParams)
+            wheelAndPallets = WheelAndPallets(numTeeth, lockingDiam, **commonParams)
             wheelAndPallets.draw()
 
             pivotDistBetweenWheelAndPallets = wheelAndPallets.getPivotDistance()
@@ -318,7 +308,7 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                     'holeDiam' : _holeDiam.value
                 }
 
-                wheelAndPallets = WheelAndPallets(int(_numTeeth.text), _lockingDiam.value, _thickness.value, **commonParams)
+                wheelAndPallets = WheelAndPallets(int(_numTeeth.text), _lockingDiam.value, **commonParams)
                 pivotDistBetweenWheelAndPallets = wheelAndPallets.getPivotDistance()
 
                 leverAndRoller = LeverAndRoller(pivotDistBetweenWheelAndPallets,
@@ -446,13 +436,11 @@ class WheelAndPallets(CommonDrawingPrameters):
     def __init__(self,
                  numTeeth,
                  lockingDiam,
-                 thickness,
                  **commonParameters):
 
         super().__init__(**commonParameters)
         self.__numTeeth = numTeeth
         self.__lockingDiam = lockingDiam
-        self.__thickness = thickness
 
         self.__teethRootDiam = self.__lockingDiam*2/3
 
