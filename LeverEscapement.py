@@ -434,24 +434,6 @@ class Points:
 
         return angle
 
-    def getArcCenter(self, arc):
-        arcEvaluator = arc.geometry.evaluator
-        _, startParam, endParam = arcEvaluator.getParameterExtents()
-
-        arcStartPoint = arc.geometry.startPoint
-        _, arcMiddlePoint = arcEvaluator.getPointAtParameter((startParam + endParam)/2)
-        arcEndPoint = arc.geometry.endPoint
-
-        angleSME = self.getThreePointsAngle(arcStartPoint, arcMiddlePoint, arcEndPoint)
-        scalar = (arcMiddlePoint.vectorTo(arcStartPoint).length/2) / math.cos(math.radians(angleSME/2))
-        vector = self.addVectors(arcMiddlePoint.vectorTo(arcStartPoint), arcMiddlePoint.vectorTo(arcEndPoint))
-        vector.normalize()
-        vector.scaleBy(scalar)
-
-        arcCenterPoint = arcMiddlePoint.copy()
-        arcCenterPoint.translateBy(vector)
-
-        return arcCenterPoint
 
 class CommonDrawingPrameters:
     def __init__(self, design, leverWidth, leverAngle, holeDiam):
