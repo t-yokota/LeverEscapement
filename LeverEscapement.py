@@ -3,19 +3,23 @@
 
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import math
+from distutils.util import strtobool
 
 # Globals
 _app = adsk.core.Application.cast(None)
 _ui = adsk.core.UserInterface.cast(None)
 _units = ''
 
-# Command inputs
 _description = adsk.core.TextBoxCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
+
 _numTeeth = adsk.core.TextBoxCommandInput.cast(None)
 _lockingDiam = adsk.core.ValueCommandInput.cast(None)
 _majorDiam = adsk.core.TextBoxCommandInput.cast(None)
 _arborDistBetweenWheelAndPallets = adsk.core.TextBoxCommandInput.cast(None)
+_lighteningBool = adsk.core.BoolValueCommandInput.cast(None)
+_wallThickness = adsk.core.ValueCommandInput.cast(None)
+
 _arborDistBetweenLeverAndRoller = adsk.core.ValueCommandInput.cast(None)
 _leverWidth = adsk.core.ValueCommandInput.cast(None)
 _rollerAngleRaitoToLeverAngle = adsk.core.ValueCommandInput.cast(None)
@@ -101,6 +105,16 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             if lockingDiamAttrib:
                 lockingDiam = lockingDiamAttrib.value
 
+            lighteningBool = True
+            lighteningBoolAttrib = des.attributes.itemByName('LeverEscapement', 'lighteningBool')
+            if lighteningBoolAttrib:
+                lighteningBool = True if strtobool(lighteningBoolAttrib.value) == 1 else False
+
+            wallThickness = '0.2'
+            wallThicknessAttrib = des.attributes.itemByName('LeverEscapement', 'wallThickness')
+            if wallThicknessAttrib:
+                wallThickness = wallThicknessAttrib.value
+
             leverWidth = '0.4'
             leverWidthAttrib = des.attributes.itemByName('LeverEscapement', 'leverWidth')
             if leverWidthAttrib:
@@ -133,7 +147,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 'holeDiam' : float(holeDiam)
             }
 
-            wheelAndPallets = WheelAndPallets(int(numTeeth), float(lockingDiam), **commonParams)
+            wheelAndPallets = WheelAndPallets(int(numTeeth), float(lockingDiam), lighteningBool, float(wallThickness), **commonParams)
 
             arborDistBetweenWheelAndPallets = str(round(wheelAndPallets.getArborDistance()*10, 3))
 
@@ -162,7 +176,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             inputs = cmd.commandInputs
 
             global _description
-            global _numTeeth, _lockingDiam, _holeDiam, _majorDiam
+            global _numTeeth, _lockingDiam, _holeDiam, _majorDiam, _lighteningBool, _wallThickness
             global _arborDistBetweenWheelAndPallets, _arborDistBetweenLeverAndRoller, _leverWidth
             global _rollerAngleRaitoToLeverAngle, _leverAngle, _rollerAngle
             global _impulsePinAngle, _impulsePinDiam
@@ -170,7 +184,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             global _errMessage
 
             # Define the command dialog.
-            ## For Common setting
+            ## For Common settings
             _description = inputs.addTextBoxCommandInput('description', '', '<br><b>Common settings:</b>', 2, True)
             _description.isFullWidth = True
 
@@ -187,6 +201,11 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _majorDiam = inputs.addTextBoxCommandInput('majorDiam', 'Major Diameter [mm]', majorDiam, 1, True)
 
             _arborDistBetweenWheelAndPallets = inputs.addTextBoxCommandInput('arborDistBetweenWheelAndPallets', 'Arbor Distance (Wheel to Pallets) [mm]', arborDistBetweenWheelAndPallets, 1, True)
+
+            _lighteningBool = inputs.addBoolValueInput('lighteningBool', 'Lightening the wheel', True, '', lighteningBool)
+
+            _wallThickness = inputs.addValueInput('wallThickness', 'Thickness of the wall', _units, adsk.core.ValueInput.createByReal(float(wallThickness)))
+            _wallThickness.isEnabled = True if lighteningBool == True else False
 
             ## For Lever and Roller
             _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Lever and the Roller:</b>', 2, True)
@@ -251,6 +270,8 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             attribs = des.attributes
             # attribs.add('LeverEscapement', 'numTeeth', _numTeeth.text)
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
+            attribs.add('LeverEscapement', 'lighteningBool', str(_lighteningBool.value))
+            attribs.add('LeverEscapement', 'wallThickness', str(_wallThickness.value))
             attribs.add('LeverEscapement', 'arborDistBetweenLeverAndRoller', str(_arborDistBetweenLeverAndRoller.value))
             attribs.add('LeverEscapement', 'leverWidth', str(_leverWidth.value))
             attribs.add('LeverEscapement', 'rollerAngleRaitoToLeverAngle', str(_rollerAngleRaitoToLeverAngle.value))
@@ -261,6 +282,8 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
 
             numTeeth = int(_numTeeth.text)
             lockingDiam = _lockingDiam.value
+            lighteningBool = _lighteningBool.value
+            wallThickness = _wallThickness.value
             arborDistBetweenLeverAndRoller = _arborDistBetweenLeverAndRoller.value
             leverWidth = _leverWidth.value
             rollerAngleRaitoToLeverAngle = _rollerAngleRaitoToLeverAngle.value
@@ -276,7 +299,7 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
                 'holeDiam' : holeDiam
             }
 
-            wheelAndPallets = WheelAndPallets(numTeeth, lockingDiam, **commonParams)
+            wheelAndPallets = WheelAndPallets(numTeeth, lockingDiam, lighteningBool, wallThickness, **commonParams)
             wheelAndPallets.draw()
 
             arborDistBetweenWheelAndPallets = wheelAndPallets.getArborDistance()
@@ -311,8 +334,14 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                     'holeDiam' : _holeDiam.value
                 }
 
+                if changedInput.id == 'lighteningBool':
+                    if _lighteningBool.value:
+                        _wallThickness.isEnabled = True
+                    else:
+                        _wallThickness.isEnabled = False
+
                 if changedInput.id == 'lockingDiam':
-                    wheelAndPallets = WheelAndPallets(int(_numTeeth.text), _lockingDiam.value, **commonParams)
+                    wheelAndPallets = WheelAndPallets(int(_numTeeth.text), _lockingDiam.value, _lighteningBool.value, _wallThickness.value, **commonParams)
                     arborDistBetweenWheelAndPallets = wheelAndPallets.getArborDistance()
 
                     _majorDiam.text = str(round(wheelAndPallets.getWheelMajorDiameter()*10, 3))
@@ -450,15 +479,22 @@ class WheelAndPallets(CommonDrawingPrameters):
     def __init__(self,
                  numTeeth,
                  lockingDiam,
+                 lighteningBool,
+                 wallThickness,
                  **commonParameters):
 
         super().__init__(**commonParameters)
         self.__numTeeth = numTeeth
         self.__lockingDiam = lockingDiam
+        self.__lighteningBool = lighteningBool
+        self.__wallThicknessForLighting = wallThickness
 
         self.__rootDiamOfTeeth = self.__lockingDiam*2/3
         self.__angleForLeverBranchStartPoint = 10 # [deg]
         self.__angleForPalletsExtension = 4 # [deg]
+
+        self.__outerDiamForLighting = self.__rootDiamOfTeeth - self.__wallThicknessForLighting*2
+        self.__innerDiamForLighting = self.getArborHoleDiam() + self.__wallThicknessForLighting*2
 
         self.__points = Points()
         self.__getPointsForDrawing()
@@ -881,6 +917,58 @@ class WheelAndPallets(CommonDrawingPrameters):
                 inputEntities = adsk.core.ObjectCollection.create()
                 inputEntities.add(copiedInclineFace)
                 inputEntities.add(copiedLockingFace)
+
+        # Drawing for lightening
+        if self.__lighteningBool:
+            innerLightingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__innerDiamForLighting/2)
+            outerLightingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__outerDiamForLighting/2)
+
+            points.__a = adsk.core.Point3D.create(-self.__wallThicknessForLighting/2, 0, 0)
+            points.__b = adsk.core.Point3D.create(-self.__wallThicknessForLighting/2, self.__outerDiamForLighting/2, 0)
+            points.__c = adsk.core.Point3D.create( self.__wallThicknessForLighting/2, 0, 0)
+            points.__d = adsk.core.Point3D.create( self.__wallThicknessForLighting/2, self.__outerDiamForLighting/2, 0)
+
+            __line_ab = sketch.sketchCurves.sketchLines.addByTwoPoints(points.__a, points.__b)
+            __line_cd = sketch.sketchCurves.sketchLines.addByTwoPoints(points.__c, points.__d)
+
+            points.a = __line_ab.geometry.intersectWithCurve(innerLightingCircle.geometry).item(0)
+            points.b = __line_ab.geometry.intersectWithCurve(outerLightingCircle.geometry).item(0)
+            points.c = __line_cd.geometry.intersectWithCurve(innerLightingCircle.geometry).item(0)
+            points.d = __line_cd.geometry.intersectWithCurve(outerLightingCircle.geometry).item(0)
+
+            innerLightingCircle.deleteMe()
+            outerLightingCircle.deleteMe()
+            __line_ab.deleteMe()
+            __line_cd.deleteMe()
+
+            line_ab = sketch.sketchCurves.sketchLines.addByTwoPoints(points.a, points.b)
+            line_cd = sketch.sketchCurves.sketchLines.addByTwoPoints(points.c, points.d)
+
+            inputEntities = adsk.core.ObjectCollection.create()
+            inputEntities.add(line_ab)
+            inputEntities.add(line_cd)
+
+            for i in range(1, 4):
+                transform.setToRotation(math.radians(120), normal, self.__points.A)
+                copiedEntities = sketch.copy(inputEntities, transform)
+                copiedSketchLine = [entity for entity in copiedEntities if isinstance(entity, adsk.fusion.SketchLine)]
+
+                originLineForArc = inputEntities.item(0)
+                copiedLineForArc = copiedSketchLine[1]
+
+                angle = points.getThreePointsAngle(originLineForArc.geometry.startPoint, self.__points.A, copiedLineForArc.geometry.startPoint)
+                sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.startPoint, math.radians(angle))
+
+                angle = points.getThreePointsAngle(originLineForArc.geometry.endPoint, self.__points.A, copiedLineForArc.geometry.endPoint)
+                sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.endPoint, math.radians(angle))
+
+                if i == 3:
+                    copiedSketchLine[0].deleteMe()
+                    copiedSketchLine[1].deleteMe()
+                else:
+                    inputEntities = adsk.core.ObjectCollection.create()
+                    inputEntities.add(copiedSketchLine[0])
+                    inputEntities.add(copiedSketchLine[1])
 
     def drawPallets(self):
         sketch = self.__palletSketch
