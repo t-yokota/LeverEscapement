@@ -196,7 +196,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _description = inputs.addTextBoxCommandInput('description', '', '<br><b>Common settings:</b>', 2, True)
             _description.isFullWidth = True
 
-            _plane = inputs.addDropDownCommandInput('plane', 'plane', adsk.core.DropDownStyles.TextListDropDownStyle)
+            _plane = inputs.addDropDownCommandInput('plane', 'Sketch Plane', adsk.core.DropDownStyles.TextListDropDownStyle)
             if plane == 'X-Y plane':
                 _plane.listItems.add('X-Y plane', True)
                 _plane.listItems.add('X-Z plane', False)
@@ -224,9 +224,9 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             _arborDistBetweenWheelAndPallets = inputs.addTextBoxCommandInput('arborDistBetweenWheelAndPallets', 'Arbor Distance (Wheel to Pallets) [mm]', arborDistBetweenWheelAndPallets, 1, True)
 
-            _lighteningBool = inputs.addBoolValueInput('lighteningBool', 'Lightening the wheel', True, '', lighteningBool)
+            _lighteningBool = inputs.addBoolValueInput('lighteningBool', 'Lightening the Wheel', True, '', lighteningBool)
 
-            _wallThickness = inputs.addValueInput('wallThickness', 'Thickness of the wall', _units, adsk.core.ValueInput.createByReal(float(wallThickness)))
+            _wallThickness = inputs.addValueInput('wallThickness', 'Thickness of the Wall', _units, adsk.core.ValueInput.createByReal(float(wallThickness)))
             _wallThickness.isEnabled = True if lighteningBool == True else False
 
             ## For Lever and Roller
@@ -549,8 +549,8 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__wheelComp = adsk.fusion.Component.cast(self.__wheelOcc.component)
         self.__palletComp = adsk.fusion.Component.cast(self.__palletOcc.component)
 
-        self.__wheelComp.name = "escape wheel"
-        self.__palletComp.name = "pallets"
+        self.__wheelComp.name = 'escape wheel'
+        self.__palletComp.name = 'pallets'
 
         # Create new sketches in each component.
         plane = self.getPlane()
@@ -575,10 +575,10 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__wheelSketch = self.__wheelComp.sketches.add(wheelSketchPlane)
         self.__palletSketch =  self.__palletComp.sketches.add(palletSketchPlane)
 
-        self.__wheelBaseSketch.name = "constructions"
-        self.__palletBaseSketch.name = "constructions"
-        self.__wheelSketch.name = "escape wheel"
-        self.__palletSketch.name = "pallets"
+        self.__wheelBaseSketch.name = 'constructions'
+        self.__palletBaseSketch.name = 'constructions'
+        self.__wheelSketch.name = 'escape wheel'
+        self.__palletSketch.name = 'pallets'
 
         self.__wheelBaseSketch.isVisible = False
         self.__palletBaseSketch.isVisible = False
@@ -1190,8 +1190,8 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__leverComp = adsk.fusion.Component.cast(self.__leverOcc.component)
         self.__rollerComp = adsk.fusion.Component.cast(self.__rollerOcc.component)
 
-        self.__leverComp.name = "lever"
-        self.__rollerComp.name = "roller"
+        self.__leverComp.name = 'lever'
+        self.__rollerComp.name = 'roller'
 
         # Create new sketches in each component.
         plane = self.getPlane()
@@ -1216,10 +1216,10 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__leverSketch =  self.__leverComp.sketches.add(leverSketchPlane)
         self.__rollerSketch = self.__rollerComp.sketches.add(rollerSketchPlane)
 
-        self.__leverBaseSketch.name = "constructions"
-        self.__rollerBaseSketch.name = "constructions"
-        self.__leverSketch.name = "lever"
-        self.__rollerSketch.name = "roller"
+        self.__leverBaseSketch.name = 'constructions'
+        self.__rollerBaseSketch.name = 'constructions'
+        self.__leverSketch.name = 'lever'
+        self.__rollerSketch.name = 'roller'
 
         self.__leverBaseSketch.isVisible = False
         self.__rollerBaseSketch.isVisible = False
