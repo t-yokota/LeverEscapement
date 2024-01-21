@@ -321,7 +321,7 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                 else:
                     arborDistBetweenWheelAndPallets = float(_arborDistBetweenWheelAndPallets.text)
 
-                leverAndRoller = LeverAndRoller(float(_arborDistBetweenWheelAndPallets.text),
+                leverAndRoller = LeverAndRoller(arborDistBetweenWheelAndPallets,
                                                 _arborDistBetweenLeverAndRoller.value,
                                                 _rollerAngleRaitoToLeverAngle.value,
                                                 _impulsePinAngle.value,
@@ -456,8 +456,8 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__numTeeth = numTeeth
         self.__lockingDiam = lockingDiam
 
-        self.__teethRootDiam = self.__lockingDiam*2/3
-        self.__leverBranchStartAngle = 10 # [deg]
+        self.__rootDiamOfTeeth = self.__lockingDiam*2/3
+        self.__angleForLeverBranchStartPoint = 10 # [deg]
         self.__angleForPalletsExtension = 4 # [deg]
 
         self.__points = Points()
@@ -661,13 +661,13 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__points.ZD = self.__points.J.copy()
         self.__points.ZD.translateBy(vector)
 
-        transform.setToRotation(math.radians(self.getLeverAngle()/2-self.__leverBranchStartAngle), normal, self.__points.O)
+        transform.setToRotation(math.radians(self.getLeverAngle()/2-self.__angleForLeverBranchStartPoint), normal, self.__points.O)
         vector = adsk.core.Vector3D.create(0, -self.getLeverWidth()/2, 0)
         vector.transformBy(transform)
         self.__points.ZE = self.__points.O.copy()
         self.__points.ZE.translateBy(vector)
 
-        transform.setToRotation(math.radians(self.getLeverAngle()/2+self.__leverBranchStartAngle), normal, self.__points.O)
+        transform.setToRotation(math.radians(self.getLeverAngle()/2+self.__angleForLeverBranchStartPoint), normal, self.__points.O)
         vector = adsk.core.Vector3D.create(0, -self.getLeverWidth()/2, 0)
         vector.transformBy(transform)
         self.__points.ZF = self.__points.O.copy()
@@ -779,7 +779,7 @@ class WheelAndPallets(CommonDrawingPrameters):
         lineRX = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.R, self.__points.X)
         lineRX.isConstruction = True
 
-        teethRootCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__teethRootDiam/2)
+        teethRootCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__rootDiamOfTeeth/2)
         teethRootCircle.isConstruction = True
 
     def drawPalletsConstructions(self):
@@ -844,7 +844,7 @@ class WheelAndPallets(CommonDrawingPrameters):
         wheelTeethInclineFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.N, self.__points.R)
 
         # Locking face of wheel teeth
-        teethRootCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__teethRootDiam/2)
+        teethRootCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__rootDiamOfTeeth/2)
         lineRX = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.R, self.__points.X)
 
         points.x = lineRX.geometry.intersectWithCurve(teethRootCircle.geometry).item(0)
