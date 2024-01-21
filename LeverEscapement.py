@@ -138,6 +138,9 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             arborDistBetweenWheelAndPallets = str(round(wheelAndPallets.getArborDistance()*10, 3))
 
             arborDistBetweenLeverAndRoller = str(wheelAndPallets.getArborDistance())
+            arborDistBetweenLeverAndRollerAttrib = des.attributes.itemByName('LeverEscapement', 'arborDistBetweenLeverAndRoller')
+            if arborDistBetweenLeverAndRollerAttrib:
+                arborDistBetweenLeverAndRoller = arborDistBetweenLeverAndRollerAttrib.value
 
             leverAndRoller = LeverAndRoller(float(arborDistBetweenWheelAndPallets),
                                             float(arborDistBetweenLeverAndRoller),
@@ -345,6 +348,7 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
 #     def notify(self, args):
 #         try:
 #             ## TBA
+
 
 class Points:
     def __init__(self):
