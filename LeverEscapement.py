@@ -458,6 +458,7 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         self.__teethRootDiam = self.__lockingDiam*2/3
         self.__leverBranchStartAngle = 10 # [deg]
+        self.__angleForPalletsExtension = 4 # [deg]
 
         self.__points = Points()
         self.__getPointsForDrawing()
@@ -496,8 +497,8 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__wheelSketch.name = "escape wheel"
         self.__palletSketch.name = "pallets"
 
-        self.__wheelBaseSketch.isVisible = True
-        self.__palletBaseSketch.isVisible = True
+        self.__wheelBaseSketch.isVisible = False
+        self.__palletBaseSketch.isVisible = False
 
         # Define a normal vector for rotation.
         self.__wheelNormal = self.__wheelBaseSketch.referencePlane.geometry.normal
@@ -672,6 +673,23 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__points.ZF = self.__points.O.copy()
         self.__points.ZF.translateBy(vector)
 
+        # Get points for drawing pallets' extenstion (Due to insufficient accuracy in 3D printing, We extend the pallets to ensure that the lock can operate).
+        transform.setToRotation(math.radians(self.__angleForPalletsExtension), normal, self.__points.O)
+        self.__points.__extQ =self.__points.__Q.copy()
+        self.__points.__extQ.transformBy(transform)
+
+        self.__points.extQ = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extQ, self.__points.ZB, self.__points.__W)
+
+        transform.setToRotation(math.radians(-self.__angleForPalletsExtension), normal, self.__points.O)
+        self.__points.__extF =self.__points.__F.copy()
+        self.__points.__extF.transformBy(transform)
+
+        transform.setToRotation(math.radians(180), normal, self.__points.F)
+        self.__points.__ZC =self.__points.ZC.copy()
+        self.__points.__ZC.transformBy(transform)
+
+        self.__points.extF = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extF, self.__points.ZC, self.__points.__ZC)
+
     def drawWheelConstructions(self):
         sketch = self.__wheelBaseSketch
 
@@ -799,6 +817,18 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         # pointZG = sketch.sketchPoints.add(self.__points.ZF)
         # pointZH = sketch.sketchPoints.add(self.__points.ZH)
+
+        lineOQ = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.Q)
+        lineOQ.isConstruction = True
+
+        lineExtOQ = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.extQ)
+        lineExtOQ.isConstruction = True
+
+        lineOF = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.F)
+        lineOF.isConstruction = True
+
+        lineExtOF = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.extF)
+        lineExtOF.isConstruction = True
 
     def drawWheel(self):
         sketch = self.__wheelSketch
@@ -950,6 +980,7 @@ class WheelAndPallets(CommonDrawingPrameters):
         # Enter pallet
         ## Incline face
         enterPalletInclineFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.P)
+        enterPalletInclineFace.isConstruction = True
 
         ## Locking face
         enterPalletLockingFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, points.zb)
@@ -957,15 +988,24 @@ class WheelAndPallets(CommonDrawingPrameters):
         ## Another face
         enterPalletAnotherFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.P, points.za)
 
+        ## Extension
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.extQ)
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extQ, self.__points.P)
+
         # Exit pallet
         ## Incline face
         exitPalletInclineFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.J)
+        exitPalletInclineFace.isConstruction = True
 
         ## Locking face
         exitPalletLockingFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, points.zc)
 
         ## Another face
         exitPalletAnotherFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.J, points.zd)
+
+        ## Extension
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.extF)
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extF, self.__points.J)
 
         # Ohters
         angle = points.getThreePointsAngle(self.__points.ZE, self.__points.O, self.__points.ZF)
