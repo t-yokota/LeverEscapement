@@ -308,46 +308,30 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                     'holeDiam' : _holeDiam.value
                 }
 
-                wheelAndPallets = WheelAndPallets(int(_numTeeth.text), _lockingDiam.value, **commonParams)
-                arborDistBetweenWheelAndPallets = wheelAndPallets.getArborDistance()
+                if changedInput.id == 'lockingDiam':
+                    wheelAndPallets = WheelAndPallets(int(_numTeeth.text), _lockingDiam.value, **commonParams)
+                    arborDistBetweenWheelAndPallets = wheelAndPallets.getArborDistance()
 
-                leverAndRoller = LeverAndRoller(arborDistBetweenWheelAndPallets,
+                    _majorDiam.text = str(round(wheelAndPallets.getWheelMajorDiameter()*10, 3))
+                    _arborDistBetweenWheelAndPallets.text = str(round(arborDistBetweenWheelAndPallets*10, 3))
+                    _arborDistBetweenLeverAndRoller.value = arborDistBetweenWheelAndPallets
+                else:
+                    arborDistBetweenWheelAndPallets = float(_arborDistBetweenWheelAndPallets.text)
+
+                leverAndRoller = LeverAndRoller(float(_arborDistBetweenWheelAndPallets.text),
                                                 _arborDistBetweenLeverAndRoller.value,
                                                 _rollerAngleRaitoToLeverAngle.value,
                                                 _impulsePinAngle.value,
                                                 _balanceRollerDiamRaitoToSatefyRollerDiam.value,
                                                 **commonParams)
+
+                _rollerAngle.text = str(float(_leverAngle.text)*_rollerAngleRaitoToLeverAngle.value)
+                _impulsePinDiam.text = str(round(leverAndRoller.getImpulsePinDiameter()*10, 3))
+                _balanceRollerDiam.text = str(round(leverAndRoller.getBalanceRollerDiameter()*10, 3))
+                _satefyRollerDiam.text = str(round(leverAndRoller.getBalanceRollerDiameter()*10/_balanceRollerDiamRaitoToSatefyRollerDiam.value, 3))
+
             except:
                 pass
-
-            # Update the major diameter value.
-            if changedInput.id == 'lockingDiam':
-                try:
-                    _majorDiam.text = str(round(wheelAndPallets.getWheelMajorDiameter()*10, 3))
-                    _arborDistBetweenWheelAndPallets.text = str(round(wheelAndPallets.getArborDistance()*10, 3))
-                    if _arborDistBetweenLeverAndRoller.value < wheelAndPallets.getArborDistance():
-                        _arborDistBetweenLeverAndRoller.value = wheelAndPallets.getArborDistance()
-                except:
-                    pass
-
-            if changedInput.id == 'rollerAngleRaitoToLeverAngle':
-                try:
-                    _rollerAngle.text = str(float(_leverAngle.text)*_rollerAngleRaitoToLeverAngle.value)
-                except:
-                    pass
-
-            if changedInput.id == 'arborDistBetweenLeverAndRoller' or changedInput.id == 'rollerAngleRaitoToLeverAngle' or changedInput.id == 'impulsePinAngle':
-                try:
-                    _impulsePinDiam.text = str(round(leverAndRoller.getImpulsePinDiameter()*10, 3))
-                except:
-                    pass
-
-            if changedInput.id == 'balanceRollerDiamRaitoToSatefyRollerDiam':
-                try:
-                    _balanceRollerDiam.text = str(round(leverAndRoller.getBalanceRollerDiameter()*10, 3))
-                    _satefyRollerDiam.text = str(round(leverAndRoller.getBalanceRollerDiameter()*10/float(_balanceRollerDiamRaitoToSatefyRollerDiam.value), 3))
-                except:
-                    pass
 
         except:
             if _ui:
