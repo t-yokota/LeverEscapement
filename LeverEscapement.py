@@ -11,6 +11,7 @@ _ui = adsk.core.UserInterface.cast(None)
 _units = ''
 
 _description = adsk.core.TextBoxCommandInput.cast(None)
+_plane = adsk.core.DropDownCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
 
 _numTeeth = adsk.core.TextBoxCommandInput.cast(None)
@@ -93,6 +94,11 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _units = 'mm'
 
             # Define the default values and get the previous values from the attributes.
+            plane = 'X-Z plane'
+            planeAttrib = des.attributes.itemByName('LeverEscapement', 'plane')
+            if planeAttrib:
+                plane = planeAttrib.value
+
             holeDiam = '0.15' # 0.15[cm] = 1.5[mm]
             holeDiamAttrib = des.attributes.itemByName('LeverEscapement', 'holeDiam')
             if holeDiamAttrib:
@@ -142,9 +148,10 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             # Define the default values based on caluculated points.
             commonParams = {
                 'design': des,
+                'plane' : plane,
+                'holeDiam' : float(holeDiam),
                 'leverWidth': float(leverWidth),
                 'leverAngle': float(leverAngle),
-                'holeDiam' : float(holeDiam)
             }
 
             wheelAndPallets = WheelAndPallets(int(numTeeth), float(lockingDiam), lighteningBool, float(wallThickness), **commonParams)
@@ -176,7 +183,8 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             inputs = cmd.commandInputs
 
             global _description
-            global _numTeeth, _lockingDiam, _holeDiam, _majorDiam, _lighteningBool, _wallThickness
+            global _plane, _holeDiam
+            global _numTeeth, _lockingDiam, _majorDiam, _lighteningBool, _wallThickness
             global _arborDistBetweenWheelAndPallets, _arborDistBetweenLeverAndRoller, _leverWidth
             global _rollerAngleRaitoToLeverAngle, _leverAngle, _rollerAngle
             global _impulsePinAngle, _impulsePinDiam
@@ -187,6 +195,20 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             ## For Common settings
             _description = inputs.addTextBoxCommandInput('description', '', '<br><b>Common settings:</b>', 2, True)
             _description.isFullWidth = True
+
+            _plane = inputs.addDropDownCommandInput('plane', 'plane', adsk.core.DropDownStyles.TextListDropDownStyle)
+            if plane == 'X-Y plane':
+                _plane.listItems.add('X-Y plane', True)
+                _plane.listItems.add('X-Z plane', False)
+                _plane.listItems.add('Y-Z plane', False)
+            elif plane == 'X-Z plane':
+                _plane.listItems.add('X-Y plane', False)
+                _plane.listItems.add('X-Z plane', True)
+                _plane.listItems.add('Y-Z plane', False)
+            elif plane == 'Y-Z plane':
+                _plane.listItems.add('X-Y plane', False)
+                _plane.listItems.add('X-Z plane', False)
+                _plane.listItems.add('Y-Z plane', True)
 
             _holeDiam = inputs.addValueInput('holeDiam', 'Diameter of Arbor Hole', _units, adsk.core.ValueInput.createByReal(float(holeDiam)))
 
@@ -268,6 +290,8 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             # Save the current values as attributes.
             des = adsk.fusion.Design.cast(_app.activeProduct)
             attribs = des.attributes
+            attribs.add('LeverEscapement', 'plane', _plane.selectedItem.name)
+            attribs.add('LeverEscapement', 'holeDiam', str(_holeDiam.value))
             # attribs.add('LeverEscapement', 'numTeeth', _numTeeth.text)
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
             attribs.add('LeverEscapement', 'lighteningBool', str(_lighteningBool.value))
@@ -278,8 +302,9 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             # attribs.add('LeverEscapement', 'leverAngle', _leverAngle.text)
             attribs.add('LeverEscapement', 'impulsePinAngle', str(math.degrees(_impulsePinAngle.value)))
             attribs.add('LeverEscapement', 'balanceRollerDiamRaitoToSatefyRollerDiam', str(_balanceRollerDiamRaitoToSatefyRollerDiam.value))
-            attribs.add('LeverEscapement', 'holeDiam', str(_holeDiam.value))
 
+            plane = _plane.selectedItem.name
+            holeDiam = _holeDiam.value
             numTeeth = int(_numTeeth.text)
             lockingDiam = _lockingDiam.value
             lighteningBool = _lighteningBool.value
@@ -290,13 +315,13 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             leverAngle = float(_leverAngle.text)
             impulsePinAngle = _impulsePinAngle.value
             balanceRollerDiamRaitoToSatefyRollerDiam = _balanceRollerDiamRaitoToSatefyRollerDiam.value
-            holeDiam = _holeDiam.value
 
             commonParams = {
                 'design': des,
+                'plane': plane,
+                'holeDiam': holeDiam,
                 'leverWidth': leverWidth,
                 'leverAngle': leverAngle,
-                'holeDiam' : holeDiam
             }
 
             wheelAndPallets = WheelAndPallets(numTeeth, lockingDiam, lighteningBool, wallThickness, **commonParams)
@@ -329,9 +354,10 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
             try:
                 commonParams = {
                     'design': des,
+                    'plane': _plane.selectedItem.name,
+                    'holeDiam' : _holeDiam.value,
                     'leverWidth': _leverWidth.value,
                     'leverAngle': float(_leverAngle.text),
-                    'holeDiam' : _holeDiam.value
                 }
 
                 if changedInput.id == 'lighteningBool':
@@ -453,8 +479,9 @@ class Points:
 
 
 class CommonDrawingPrameters:
-    def __init__(self, design, leverWidth, leverAngle, holeDiam):
+    def __init__(self, design, plane, holeDiam, leverWidth, leverAngle):
         self.__design = design
+        self.__plane = plane
         self.__leverWidth = leverWidth
         self.__leverAngle = leverAngle
         self.__holeDiam = holeDiam
@@ -463,14 +490,17 @@ class CommonDrawingPrameters:
     def getDesign(self):
         return self.__design
 
+    def getPlane(self):
+        return self.__plane
+
+    def getArborHoleDiam(self):
+        return self.__holeDiam
+
     def getLeverWidth(self):
         return self.__leverWidth
 
     def getLeverAngle(self):
         return self.__leverAngle
-
-    def getArborHoleDiam(self):
-        return self.__holeDiam
 
     def getLeverAngleOffset(self):
         return self.__leverAngleOffset
@@ -523,10 +553,27 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__palletComp.name = "pallets"
 
         # Create new sketches in each component.
-        self.__wheelBaseSketch = self.__wheelComp.sketches.add(self.__wheelComp.xYConstructionPlane)
-        self.__palletBaseSketch =  self.__palletComp.sketches.add(self.__palletComp.xYConstructionPlane)
-        self.__wheelSketch = self.__wheelComp.sketches.add(self.__wheelComp.xYConstructionPlane)
-        self.__palletSketch =  self.__palletComp.sketches.add(self.__palletComp.xYConstructionPlane)
+        plane = self.getPlane()
+        if plane == 'X-Y plane':
+            wheelSketchPlane = self.__wheelComp.xYConstructionPlane
+            palletSketchPlane = self.__palletComp.xYConstructionPlane
+            self.__wheelNormal = adsk.core.Vector3D.create(0, 0, 1)
+            self.__palletNormal = adsk.core.Vector3D.create(0, 0, 1)
+        elif plane == 'X-Z plane':
+            wheelSketchPlane = self.__wheelComp.xZConstructionPlane
+            palletSketchPlane = self.__palletComp.xZConstructionPlane
+            self.__wheelNormal = adsk.core.Vector3D.create(0, -1, 0)
+            self.__palletNormal = adsk.core.Vector3D.create(0, -1, 0)
+        elif plane == 'Y-Z plane':
+            wheelSketchPlane = self.__wheelComp.yZConstructionPlane
+            palletSketchPlane = self.__palletComp.yZConstructionPlane
+            self.__wheelNormal = adsk.core.Vector3D.create(-1, 0, 0)
+            self.__palletNormal = adsk.core.Vector3D.create(-1, 0, 0)
+
+        self.__wheelBaseSketch = self.__wheelComp.sketches.add(wheelSketchPlane)
+        self.__palletBaseSketch =  self.__palletComp.sketches.add(palletSketchPlane)
+        self.__wheelSketch = self.__wheelComp.sketches.add(wheelSketchPlane)
+        self.__palletSketch =  self.__palletComp.sketches.add(palletSketchPlane)
 
         self.__wheelBaseSketch.name = "constructions"
         self.__palletBaseSketch.name = "constructions"
@@ -537,8 +584,8 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__palletBaseSketch.isVisible = False
 
         # Define a normal vector for rotation.
-        self.__wheelNormal = self.__wheelBaseSketch.referencePlane.geometry.normal
-        self.__palletNormal = self.__palletBaseSketch.referencePlane.geometry.normal
+        # self.__wheelNormal = self.__wheelBaseSketch.referencePlane.geometry.normal
+        # self.__palletNormal = self.__palletBaseSketch.referencePlane.geometry.normal
         self.__wheelNormal.transformBy(self.__wheelBaseSketch.transform)
         self.__palletNormal.transformBy(self.__wheelBaseSketch.transform)
 
@@ -1147,10 +1194,27 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__rollerComp.name = "roller"
 
         # Create new sketches in each component.
-        self.__leverBaseSketch = self.__leverComp.sketches.add(self.__leverComp.xYConstructionPlane)
-        self.__rollerBaseSketch = self.__rollerComp.sketches.add(self.__rollerComp.xYConstructionPlane)
-        self.__leverSketch =  self.__leverComp.sketches.add(self.__leverComp.xYConstructionPlane)
-        self.__rollerSketch = self.__rollerComp.sketches.add(self.__rollerComp.xYConstructionPlane)
+        plane = self.getPlane()
+        if plane == 'X-Y plane':
+            leverSketchPlane = self.__leverComp.xYConstructionPlane
+            rollerSketchPlane = self.__rollerComp.xYConstructionPlane
+            self.__leverNormal = adsk.core.Vector3D.create(0, 0, 1)
+            self.__rollerNormal = adsk.core.Vector3D.create(0, 0, 1)
+        elif plane == 'X-Z plane':
+            leverSketchPlane = self.__leverComp.xZConstructionPlane
+            rollerSketchPlane = self.__rollerComp.xZConstructionPlane
+            self.__leverNormal = adsk.core.Vector3D.create(0, -1, 0)
+            self.__rollerNormal = adsk.core.Vector3D.create(0, -1, 0)
+        elif plane == 'Y-Z plane':
+            leverSketchPlane = self.__leverComp.yZConstructionPlane
+            rollerSketchPlane = self.__rollerComp.yZConstructionPlane
+            self.__leverNormal = adsk.core.Vector3D.create(-1, 0, 0)
+            self.__rollerNormal = adsk.core.Vector3D.create(-1, 0, 0)
+
+        self.__leverBaseSketch = self.__leverComp.sketches.add(leverSketchPlane)
+        self.__rollerBaseSketch = self.__rollerComp.sketches.add(rollerSketchPlane)
+        self.__leverSketch =  self.__leverComp.sketches.add(leverSketchPlane)
+        self.__rollerSketch = self.__rollerComp.sketches.add(rollerSketchPlane)
 
         self.__leverBaseSketch.name = "constructions"
         self.__rollerBaseSketch.name = "constructions"
@@ -1161,8 +1225,8 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__rollerBaseSketch.isVisible = False
 
         # Define a normal vector for rotation.
-        self.__leverNormal = self.__leverBaseSketch.referencePlane.geometry.normal
-        self.__rollerNormal = self.__rollerBaseSketch.referencePlane.geometry.normal
+        # self.__leverNormal = self.__leverBaseSketch.referencePlane.geometry.normal
+        # self.__rollerNormal = self.__rollerBaseSketch.referencePlane.geometry.normal
         self.__leverNormal.transformBy(self.__leverBaseSketch.transform)
         self.__rollerNormal.transformBy(self.__rollerBaseSketch.transform)
 
