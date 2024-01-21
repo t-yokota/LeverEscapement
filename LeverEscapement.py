@@ -487,14 +487,14 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__numTeeth = numTeeth
         self.__lockingDiam = lockingDiam
         self.__lighteningBool = lighteningBool
-        self.__wallThicknessForLighting = wallThickness
+        self.__wallThicknessForLightening = wallThickness
 
         self.__rootDiamOfTeeth = self.__lockingDiam*2/3
         self.__angleForLeverBranchStartPoint = 10 # [deg]
         self.__angleForPalletsExtension = 4 # [deg]
 
-        self.__outerDiamForLighting = self.__rootDiamOfTeeth - self.__wallThicknessForLighting*2
-        self.__innerDiamForLighting = self.getArborHoleDiam() + self.__wallThicknessForLighting*2
+        self.__outerDiamForLightening = self.__rootDiamOfTeeth - self.__wallThicknessForLightening*2
+        self.__innerDiamForLightening = self.getArborHoleDiam() + self.__wallThicknessForLightening*2
 
         self.__points = Points()
         self.__getPointsForDrawing()
@@ -920,24 +920,24 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         # Drawing for lightening
         if self.__lighteningBool:
-            innerLightingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__innerDiamForLighting/2)
-            outerLightingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__outerDiamForLighting/2)
+            innerLighteningCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__innerDiamForLightening/2)
+            outerLighteningCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__outerDiamForLightening/2)
 
-            points.__a = adsk.core.Point3D.create(-self.__wallThicknessForLighting/2, 0, 0)
-            points.__b = adsk.core.Point3D.create(-self.__wallThicknessForLighting/2, self.__outerDiamForLighting/2, 0)
-            points.__c = adsk.core.Point3D.create( self.__wallThicknessForLighting/2, 0, 0)
-            points.__d = adsk.core.Point3D.create( self.__wallThicknessForLighting/2, self.__outerDiamForLighting/2, 0)
+            points.__a = adsk.core.Point3D.create(-self.__wallThicknessForLightening/2, 0, 0)
+            points.__b = adsk.core.Point3D.create(-self.__wallThicknessForLightening/2, self.__outerDiamForLightening/2, 0)
+            points.__c = adsk.core.Point3D.create( self.__wallThicknessForLightening/2, 0, 0)
+            points.__d = adsk.core.Point3D.create( self.__wallThicknessForLightening/2, self.__outerDiamForLightening/2, 0)
 
             __line_ab = sketch.sketchCurves.sketchLines.addByTwoPoints(points.__a, points.__b)
             __line_cd = sketch.sketchCurves.sketchLines.addByTwoPoints(points.__c, points.__d)
 
-            points.a = __line_ab.geometry.intersectWithCurve(innerLightingCircle.geometry).item(0)
-            points.b = __line_ab.geometry.intersectWithCurve(outerLightingCircle.geometry).item(0)
-            points.c = __line_cd.geometry.intersectWithCurve(innerLightingCircle.geometry).item(0)
-            points.d = __line_cd.geometry.intersectWithCurve(outerLightingCircle.geometry).item(0)
+            points.a = __line_ab.geometry.intersectWithCurve(innerLighteningCircle.geometry).item(0)
+            points.b = __line_ab.geometry.intersectWithCurve(outerLighteningCircle.geometry).item(0)
+            points.c = __line_cd.geometry.intersectWithCurve(innerLighteningCircle.geometry).item(0)
+            points.d = __line_cd.geometry.intersectWithCurve(outerLighteningCircle.geometry).item(0)
 
-            innerLightingCircle.deleteMe()
-            outerLightingCircle.deleteMe()
+            innerLighteningCircle.deleteMe()
+            outerLighteningCircle.deleteMe()
             __line_ab.deleteMe()
             __line_cd.deleteMe()
 
@@ -957,10 +957,10 @@ class WheelAndPallets(CommonDrawingPrameters):
                 copiedLineForArc = copiedSketchLine[1]
 
                 angle = points.getThreePointsAngle(originLineForArc.geometry.startPoint, self.__points.A, copiedLineForArc.geometry.startPoint)
-                sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.startPoint, math.radians(angle))
+                innerLighteningArc = sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.startPoint, math.radians(angle))
 
                 angle = points.getThreePointsAngle(originLineForArc.geometry.endPoint, self.__points.A, copiedLineForArc.geometry.endPoint)
-                sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.endPoint, math.radians(angle))
+                otuerLighteningArc = sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.endPoint, math.radians(angle))
 
                 if i == 3:
                     copiedSketchLine[0].deleteMe()
