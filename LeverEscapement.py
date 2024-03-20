@@ -521,7 +521,9 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         self.__rootDiamOfTeeth = self.__lockingDiam*2/3
         self.__angleForLeverBranchStartPoint = 10 # [deg]
-        self.__angleForPalletsExtension = 4 # [deg]
+
+        self.__angleForEnterPalletsExtension = 2 # [deg]
+        self.__angleForExitPalletsExtension = 4 # [deg]
 
         self.__outerDiamForLightening = self.__rootDiamOfTeeth - self.__wallThicknessForLightening*2
         self.__innerDiamForLightening = self.getArborHoleDiam() + self.__wallThicknessForLightening*2
@@ -757,21 +759,29 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__points.ZF.translateBy(vector)
 
         # Get points for drawing pallets' extenstion (Due to insufficient accuracy in 3D printing, We extend the pallets to ensure that the lock can operate).
-        transform.setToRotation(math.radians(self.__angleForPalletsExtension), normal, self.__points.O)
-        self.__points.__extQ =self.__points.__Q.copy()
+        transform.setToRotation(math.radians(self.__angleForEnterPalletsExtension), normal, self.__points.O)
+        self.__points.__extQ = self.__points.__Q.copy()
         self.__points.__extQ.transformBy(transform)
 
         self.__points.extQ = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extQ, self.__points.ZB, self.__points.__W)
 
-        transform.setToRotation(math.radians(-self.__angleForPalletsExtension), normal, self.__points.O)
-        self.__points.__extF =self.__points.__F.copy()
+        vector = self.__points.Q.vectorTo(self.__points.extQ)
+        self.__points.extP = self.__points.P.copy()
+        self.__points.extP.translateBy(vector)
+
+        transform.setToRotation(math.radians(-self.__angleForExitPalletsExtension), normal, self.__points.O)
+        self.__points.__extF = self.__points.__F.copy()
         self.__points.__extF.transformBy(transform)
 
         transform.setToRotation(math.radians(180), normal, self.__points.F)
-        self.__points.__ZC =self.__points.ZC.copy()
+        self.__points.__ZC = self.__points.ZC.copy()
         self.__points.__ZC.transformBy(transform)
 
         self.__points.extF = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extF, self.__points.ZC, self.__points.__ZC)
+
+        vector = self.__points.F.vectorTo(self.__points.extF)
+        self.__points.extJ = self.__points.J.copy()
+        self.__points.extJ.translateBy(vector)
 
     def drawWheelConstructions(self):
         sketch = self.__wheelBaseSketch
@@ -1125,7 +1135,8 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         ## Extension
         sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.extQ)
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extQ, self.__points.P)
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extQ, self.__points.extP)
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extP, self.__points.P)
 
         # Exit pallet
         ## Incline face
@@ -1140,7 +1151,8 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         ## Extension
         sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.extF)
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extF, self.__points.J)
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extF, self.__points.extJ)
+        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extJ, self.__points.J)
 
         # Ohters
         angle = points.getThreePointsAngle(self.__points.ZE, self.__points.O, self.__points.ZF)
