@@ -270,9 +270,13 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _errMessage.isFullWidth = True
 
             # Connect to the command related events.
-            onExecute = EscapementCommandExecuteHandler()
-            cmd.execute.add(onExecute)
-            _handlers.append(onExecute)
+            # onExecute = EscapementCommandExecuteHandler()
+            # cmd.execute.add(onExecute)
+            # _handlers.append(onExecute)
+
+            onExecutePreview = EscapementCommandExecutePreviewHandler()
+            cmd.executePreview.add(onExecutePreview)
+            _handlers.append(onExecutePreview)
 
             onInputChanged = EscapementCommandInputChangedHandler()
             cmd.inputChanged.add(onInputChanged)
@@ -293,7 +297,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
 
 # Event handler for the execute event.
-class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
+class EscapementCommandExecutePreviewHandler(adsk.core.CommandEventHandler):
     def __init__(self):
         super().__init__()
     def notify(self, args):
@@ -351,6 +355,8 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
                                             balanceRollerDiamRaitoToSatefyRollerDiam,
                                             **commonParams)
             leverAndRoller.draw()
+
+            args.isValidResult = True
 
         except:
             if _ui:
