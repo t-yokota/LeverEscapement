@@ -13,6 +13,7 @@ _units = ''
 _description = adsk.core.TextBoxCommandInput.cast(None)
 _plane = adsk.core.DropDownCommandInput.cast(None)
 _holeDiam = adsk.core.ValueCommandInput.cast(None)
+_extendBool = adsk.core.BoolValueCommandInput.cast(None)
 
 _numTeeth = adsk.core.TextBoxCommandInput.cast(None)
 _lockingDiam = adsk.core.ValueCommandInput.cast(None)
@@ -44,7 +45,11 @@ def run(context):
         cmdDef = _ui.commandDefinitions.itemById('adskLeverEscapementPythonScript')
         if not cmdDef:
             # Create a command definition.
-            cmdDef = _ui.commandDefinitions.addButtonDefinition('adskLeverEscapementPythonScript', 'Lever Escapement', 'Creates components for an escape wheel, a pallet lever, and a balance roller.', 'resources/LeverEscapement')
+            cmdDef = _ui.commandDefinitions.addButtonDefinition(
+                'adskLeverEscapementPythonScript',
+                'Lever Escapement',
+                'Creates components for an escape wheel, a pallet lever, and a balance roller.', 'resources/LeverEscapement'
+            )
 
         # Connect to the command created event.
         onCommandCreated = EscapementCommandCreatedHandler()
@@ -94,15 +99,20 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _units = 'mm'
 
             # Define the default values and get the previous values from the attributes.
-            plane = 'X-Z plane'
+            plane = 'X-Y plane'
             planeAttrib = des.attributes.itemByName('LeverEscapement', 'plane')
             if planeAttrib:
                 plane = planeAttrib.value
 
-            holeDiam = '0.15' # 0.15[cm] = 1.5[mm]
+            holeDiam = '0.19' # 0.19[cm] = 1.9[mm]
             holeDiamAttrib = des.attributes.itemByName('LeverEscapement', 'holeDiam')
             if holeDiamAttrib:
                 holeDiam = holeDiamAttrib.value
+
+            extendBool = True
+            extendBoolAttrib = des.attributes.itemByName('LeverEscapement', 'extendBool')
+            if extendBoolAttrib:
+                extendBool = True if strtobool(extendBoolAttrib.value) == 1 else False
 
             numTeeth = '15'
 
@@ -152,6 +162,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 'holeDiam' : float(holeDiam),
                 'leverWidth': float(leverWidth),
                 'leverAngle': float(leverAngle),
+                'extendBool' : extendBool,
             }
 
             wheelAndPallets = WheelAndPallets(int(numTeeth), float(lockingDiam), lighteningBool, float(wallThickness), **commonParams)
@@ -183,7 +194,7 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             inputs = cmd.commandInputs
 
             global _description
-            global _plane, _holeDiam
+            global _plane, _holeDiam, _extendBool
             global _numTeeth, _lockingDiam, _majorDiam, _lighteningBool, _wallThickness
             global _arborDistBetweenWheelAndPallets, _arborDistBetweenLeverAndRoller, _leverWidth
             global _rollerAngleRaitoToLeverAngle, _leverAngle, _rollerAngle
@@ -211,6 +222,8 @@ class EscapementCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 _plane.listItems.add('Y-Z plane', True)
 
             _holeDiam = inputs.addValueInput('holeDiam', 'Diameter of Arbor Hole', _units, adsk.core.ValueInput.createByReal(float(holeDiam)))
+
+            _extendBool = inputs.addBoolValueInput('extendBool', 'Extend lever angle for 3D printing', True, '', extendBool)
 
             ## For Wheel and Pallets
             _description = inputs.addTextBoxCommandInput('description', '', '<br><b>The Escape Wheel and the Pallets:</b>', 2, True)
@@ -292,6 +305,7 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
             attribs = des.attributes
             attribs.add('LeverEscapement', 'plane', _plane.selectedItem.name)
             attribs.add('LeverEscapement', 'holeDiam', str(_holeDiam.value))
+            attribs.add('LeverEscapement', 'extendBool', str(_extendBool.value))
             # attribs.add('LeverEscapement', 'numTeeth', _numTeeth.text)
             attribs.add('LeverEscapement', 'lockingDiam', str(_lockingDiam.value))
             attribs.add('LeverEscapement', 'lighteningBool', str(_lighteningBool.value))
@@ -305,6 +319,7 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
 
             plane = _plane.selectedItem.name
             holeDiam = _holeDiam.value
+            extendBool = _extendBool.value
             numTeeth = int(_numTeeth.text)
             lockingDiam = _lockingDiam.value
             lighteningBool = _lighteningBool.value
@@ -322,6 +337,7 @@ class EscapementCommandExecuteHandler(adsk.core.CommandEventHandler):
                 'holeDiam': holeDiam,
                 'leverWidth': leverWidth,
                 'leverAngle': leverAngle,
+                'extendBool': extendBool,
             }
 
             wheelAndPallets = WheelAndPallets(numTeeth, lockingDiam, lighteningBool, wallThickness, **commonParams)
@@ -358,6 +374,7 @@ class EscapementCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
                     'holeDiam' : _holeDiam.value,
                     'leverWidth': _leverWidth.value,
                     'leverAngle': float(_leverAngle.text),
+                    'extendBool' : _extendBool.value,
                 }
 
                 if changedInput.id == 'lighteningBool':
@@ -479,13 +496,15 @@ class Points:
 
 
 class CommonDrawingPrameters:
-    def __init__(self, design, plane, holeDiam, leverWidth, leverAngle):
+    def __init__(self, design, plane, holeDiam, leverWidth, leverAngle, extendBool):
         self.__design = design
         self.__plane = plane
         self.__leverWidth = leverWidth
         self.__leverAngle = leverAngle
         self.__holeDiam = holeDiam
-        self.__leverAngleOffset = 2.0 # [deg]
+        self.__extendBool = extendBool
+        self.__bankingPinOffset = 1.0 # [deg]
+        self.__bankingPinOffsetForExtension = 2.0 #[deg]
 
     def getDesign(self):
         return self.__design
@@ -502,8 +521,14 @@ class CommonDrawingPrameters:
     def getLeverAngle(self):
         return self.__leverAngle
 
-    def getLeverAngleOffset(self):
-        return self.__leverAngleOffset
+    def getExtendBool(self):
+        return self.__extendBool
+
+    def getBankingPinOffset(self):
+        return self.__bankingPinOffset
+
+    def getBankingPinOffsetForExtension(self):
+        return self.__bankingPinOffsetForExtension
 
 class WheelAndPallets(CommonDrawingPrameters):
     def __init__(self,
@@ -521,9 +546,6 @@ class WheelAndPallets(CommonDrawingPrameters):
 
         self.__rootDiamOfTeeth = self.__lockingDiam*2/3
         self.__angleForLeverBranchStartPoint = 10 # [deg]
-
-        self.__angleForEnterPalletsExtension = 2 # [deg]
-        self.__angleForExitPalletsExtension = 4 # [deg]
 
         self.__outerDiamForLightening = self.__rootDiamOfTeeth - self.__wallThicknessForLightening*2
         self.__innerDiamForLightening = self.getArborHoleDiam() + self.__wallThicknessForLightening*2
@@ -551,8 +573,15 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__wheelComp = adsk.fusion.Component.cast(self.__wheelOcc.component)
         self.__palletComp = adsk.fusion.Component.cast(self.__palletOcc.component)
 
-        self.__wheelComp.name = 'escape wheel'
-        self.__palletComp.name = 'pallets'
+        if self.__lighteningBool:
+            self.__wheelComp.name = 'EscapeWheel' + '_diam' + str(round(self.__lockingDiam*10,2)) + '_wall' + str(round(self.__wallThicknessForLightening*10,2))
+        else:
+            self.__wheelComp.name = 'EscapeWheel' + '_diam' + str(round(self.__lockingDiam*10,2))
+
+        if self.getExtendBool():
+            self.__palletComp.name = 'Pallets' + '_extended_angle' + str(round(self.getBankingPinOffsetForExtension(),2))
+        else:
+            self.__palletComp.name = 'Pallets'
 
         # Create new sketches in each component.
         plane = self.getPlane()
@@ -759,29 +788,37 @@ class WheelAndPallets(CommonDrawingPrameters):
         self.__points.ZF.translateBy(vector)
 
         # Get points for drawing pallets' extenstion (Due to insufficient accuracy in 3D printing, We extend the pallets to ensure that the lock can operate).
-        transform.setToRotation(math.radians(self.__angleForEnterPalletsExtension), normal, self.__points.O)
-        self.__points.__extQ = self.__points.__Q.copy()
-        self.__points.__extQ.transformBy(transform)
+        if self.getExtendBool():
+            # For enter pallet
+            transform.setToRotation(math.radians(self.getBankingPinOffsetForExtension()), normal, self.__points.O)
+            self.__points.__extP = self.__points.__P.copy()
+            self.__points.__extP.transformBy(transform)
 
-        self.__points.extQ = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extQ, self.__points.ZB, self.__points.__W)
+            angle = self.__points.getThreePointsAngle(self.__points.__P, self.__points.P, self.__points.ZA)
+            transform.setToRotation(math.radians(180-angle), normal, self.__points.P)
+            self.__points.expP = self.__points.__P.copy()
+            self.__points.expP.transformBy(transform)
 
-        vector = self.__points.Q.vectorTo(self.__points.extQ)
-        self.__points.extP = self.__points.P.copy()
-        self.__points.extP.translateBy(vector)
+            self.__points.extP = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extP, self.__points.P, self.__points.expP)
 
-        transform.setToRotation(math.radians(-self.__angleForExitPalletsExtension), normal, self.__points.O)
-        self.__points.__extF = self.__points.__F.copy()
-        self.__points.__extF.transformBy(transform)
+            vector = self.__points.P.vectorTo(self.__points.extP)
+            self.__points.extQ = self.__points.Q.copy()
+            self.__points.extQ.translateBy(vector)
 
-        transform.setToRotation(math.radians(180), normal, self.__points.F)
-        self.__points.__ZC = self.__points.ZC.copy()
-        self.__points.__ZC.transformBy(transform)
+            # For exit pallet
+            transform.setToRotation(math.radians(-self.getBankingPinOffsetForExtension()), normal, self.__points.O)
+            self.__points.__extF = self.__points.__F.copy()
+            self.__points.__extF.transformBy(transform)
 
-        self.__points.extF = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extF, self.__points.ZC, self.__points.__ZC)
+            transform.setToRotation(math.radians(180), normal, self.__points.F)
+            self.__points.__ZC = self.__points.ZC.copy()
+            self.__points.__ZC.transformBy(transform)
 
-        vector = self.__points.F.vectorTo(self.__points.extF)
-        self.__points.extJ = self.__points.J.copy()
-        self.__points.extJ.translateBy(vector)
+            self.__points.extF = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extF, self.__points.ZC, self.__points.__ZC)
+
+            vector = self.__points.F.vectorTo(self.__points.extF)
+            self.__points.extJ = self.__points.J.copy()
+            self.__points.extJ.translateBy(vector)
 
     def drawWheelConstructions(self):
         sketch = self.__wheelBaseSketch
@@ -911,24 +948,16 @@ class WheelAndPallets(CommonDrawingPrameters):
         # pointZG = sketch.sketchPoints.add(self.__points.ZF)
         # pointZH = sketch.sketchPoints.add(self.__points.ZH)
 
-        lineOQ = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.Q)
-        lineOQ.isConstruction = True
-
-        lineExtOQ = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.extQ)
-        lineExtOQ.isConstruction = True
-
-        lineOF = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.F)
-        lineOF.isConstruction = True
-
-        lineExtOF = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.extF)
-        lineExtOF.isConstruction = True
-
     def drawWheel(self):
         sketch = self.__wheelSketch
 
         transform = adsk.core.Matrix3D.create()
         normal = self.__wheelNormal
         points = Points()
+
+        # Locking circle
+        wheelLockingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__lockingDiam/2)
+        wheelLockingCircle.isConstruction = True
 
         # Wheel arbor
         wheelArborHole  = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.getArborHoleDiam()/2)
@@ -1079,13 +1108,13 @@ class WheelAndPallets(CommonDrawingPrameters):
         lineQZB.deleteMe()
 
         ## Innter arc to exit pallet
-        transform.setToRotation(math.radians(self.getLeverAngle() + self.getLeverAngleOffset()/2), normal, self.__points.O)
+        transform.setToRotation(math.radians(self.getLeverAngle()), normal, self.__points.O)
         points.a = self.__points.A.copy()
         points.a.transformBy(transform)
-        wheelMajorCircleRight = sketch.sketchCurves.sketchCircles.addByCenterRadius(points.a, self.getWheelMajorDiameter()/2)
+        wheelMajorCircleForExitLocking = sketch.sketchCurves.sketchCircles.addByCenterRadius(points.a, self.getWheelMajorDiameter()/2)
 
         lineFZC = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.ZC)
-        points.zc = lineFZC.geometry.intersectWithCurve(wheelMajorCircleRight.geometry).item(0)
+        points.zc = lineFZC.geometry.intersectWithCurve(wheelMajorCircleForExitLocking.geometry).item(0)
 
         transform.setToRotation(math.radians(-90), normal, self.__points.A)
         vector = self.__points.ZF.vectorTo(self.__points.O)
@@ -1096,10 +1125,30 @@ class WheelAndPallets(CommonDrawingPrameters):
         point.translateBy(vector)
         innerArcToExitPallet = sketch.sketchCurves.sketchArcs.addByThreePoints(self.__points.ZF, point, points.zc)
 
-        wheelMajorCircleRight.deleteMe()
+        wheelMajorCircleForExitLocking.deleteMe()
+
+        ## Extension
+        if self.getExtendBool():
+            innerArcToExitPallet.isConstruction = True
+            lineOzc = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, points.zc)
+            lineOzc.isConstruction = True
+
+            transform.setToRotation(math.radians(self.getLeverAngle() + self.getBankingPinOffsetForExtension()), normal, self.__points.O)
+            points.a = self.__points.A.copy()
+            points.a.transformBy(transform)
+            wheelMajorCircleForExitLocking = sketch.sketchCurves.sketchCircles.addByCenterRadius(points.a, self.getWheelMajorDiameter()/2)
+
+            points.zc = lineFZC.geometry.intersectWithCurve(wheelMajorCircleForExitLocking.geometry).item(0)
+            innerArcToExitPallet = sketch.sketchCurves.sketchArcs.addByThreePoints(self.__points.ZF, point, points.zc)
+
+            lineOzc = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, points.zc)
+            lineOzc.isConstruction = True
+
+            wheelMajorCircleForExitLocking.deleteMe()
+
         lineFZC.deleteMe()
 
-        ## outer arc to exit pallet
+        ## Outer arc to exit pallet
         # vector = self.__points.ZF.vectorTo(self.__points.O)
         transform.setToRotation(math.radians(self.getLeverAngle()/2), normal, self.__points.O)
         vector = adsk.core.Vector3D.create(0, self.getLeverWidth()/2, 0)
@@ -1125,7 +1174,6 @@ class WheelAndPallets(CommonDrawingPrameters):
         # Enter pallet
         ## Incline face
         enterPalletInclineFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.P)
-        enterPalletInclineFace.isConstruction = True
 
         ## Locking face
         enterPalletLockingFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, points.zb)
@@ -1134,14 +1182,21 @@ class WheelAndPallets(CommonDrawingPrameters):
         enterPalletAnotherFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.P, points.za)
 
         ## Extension
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.extQ)
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extQ, self.__points.extP)
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extP, self.__points.P)
+        if self.getExtendBool():
+            enterPalletInclineFace.isConstruction = True
+            sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.Q, self.__points.extQ)
+            sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extQ, self.__points.extP)
+            sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extP, self.__points.P)
+
+            lineOP = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.P)
+            lineOP.isConstruction = True
+
+            lineExtOP = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.extP)
+            lineExtOP.isConstruction = True
 
         # Exit pallet
         ## Incline face
         exitPalletInclineFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.J)
-        exitPalletInclineFace.isConstruction = True
 
         ## Locking face
         exitPalletLockingFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, points.zc)
@@ -1150,9 +1205,17 @@ class WheelAndPallets(CommonDrawingPrameters):
         exitPalletAnotherFace = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.J, points.zd)
 
         ## Extension
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.extF)
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extF, self.__points.extJ)
-        sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extJ, self.__points.J)
+        if self.getExtendBool():
+            exitPalletInclineFace.isConstruction = True
+            sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.extF)
+            sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extF, self.__points.extJ)
+            sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.extJ, self.__points.J)
+
+            lineOF = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.F)
+            lineOF.isConstruction = True
+
+            lineExtOF = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.extF)
+            lineExtOF.isConstruction = True
 
         # Ohters
         angle = points.getThreePointsAngle(self.__points.ZE, self.__points.O, self.__points.ZF)
@@ -1202,8 +1265,8 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__leverComp = adsk.fusion.Component.cast(self.__leverOcc.component)
         self.__rollerComp = adsk.fusion.Component.cast(self.__rollerOcc.component)
 
-        self.__leverComp.name = 'lever'
-        self.__rollerComp.name = 'roller'
+        self.__leverComp.name = 'Lever' + '_dist' + str(round(self.__arborDistBetweenLeverAndRoller*10,2)) +'_width' + str(round(self.getLeverWidth()*10,2)) + '_raito' + str(self.__rollerAngleRaitoToLeverAngle)
+        self.__rollerComp.name = 'Roller'+ '_angle' + str(round(self.__impulsePinAngle,2)) + '_raito' + str(self.__balanceRollerDiamRaitoToSatefyRollerDiam)
 
         # Create new sketches in each component.
         plane = self.getPlane()
@@ -1601,7 +1664,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         lineMN.deleteMe()
 
         # Construction for banking pin
-        transform.setToRotation(math.radians(self.getLeverAngleOffset()/2), normal, self.__points.O)
+        transform.setToRotation(math.radians(self.getBankingPinOffset()), normal, self.__points.O)
         point1 = self.__points.Q.copy()
         point1.transformBy(transform)
         point2 = self.__points.R.copy()
@@ -1609,13 +1672,31 @@ class LeverAndRoller(CommonDrawingPrameters):
         lineForEnterSideBankingPin = sketch.sketchCurves.sketchLines.addByTwoPoints(point1, point2)
         lineForEnterSideBankingPin.isConstruction = True
 
-        transform.setToRotation(math.radians(-self.getLeverAngleOffset()/2-self.getLeverAngle()), normal, self.__points.O)
+        if self.getExtendBool():
+            transform.setToRotation(math.radians(self.getBankingPinOffset()+self.getBankingPinOffsetForExtension()), normal, self.__points.O)
+            point1 = self.__points.Q.copy()
+            point1.transformBy(transform)
+            point2 = self.__points.R.copy()
+            point2.transformBy(transform)
+            lineForEnterSideBankingPin = sketch.sketchCurves.sketchLines.addByTwoPoints(point1, point2)
+            lineForEnterSideBankingPin.isConstruction = True
+
+        transform.setToRotation(math.radians(-self.getBankingPinOffset()-self.getLeverAngle()), normal, self.__points.O)
         point1 = self.__points.T.copy()
         point1.transformBy(transform)
         point2 = self.__points.U.copy()
         point2.transformBy(transform)
         lineForExitSideBankingPin = sketch.sketchCurves.sketchLines.addByTwoPoints(point1, point2)
         lineForExitSideBankingPin.isConstruction = True
+
+        if self.getExtendBool():
+            transform.setToRotation(math.radians(-self.getBankingPinOffset()-self.getBankingPinOffsetForExtension()-self.getLeverAngle()), normal, self.__points.O)
+            point1 = self.__points.T.copy()
+            point1.transformBy(transform)
+            point2 = self.__points.U.copy()
+            point2.transformBy(transform)
+            lineForExitSideBankingPin = sketch.sketchCurves.sketchLines.addByTwoPoints(point1, point2)
+            lineForExitSideBankingPin.isConstruction = True
 
     def drawRoller(self):
         sketch = self.__rollerSketch
