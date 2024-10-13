@@ -3,7 +3,7 @@
 
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import math
-from distutils.util import strtobool
+# from distutils.util import strtobool
 
 # Globals
 _app = adsk.core.Application.cast(None)
@@ -35,6 +35,17 @@ _satefyRollerDiam = adsk.core.TextBoxCommandInput.cast(None)
 _errMessage = adsk.core.TextBoxCommandInput.cast(None)
 
 _handlers = []
+
+
+def str_to_bool(val):
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return False
+    else:
+        raise ValueError(f"Invalid truth value: {val}")
+
 
 def run(context):
     try:
@@ -97,7 +108,7 @@ class commandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             extendBool = True
             extendBoolAttrib = des.attributes.itemByName('LeverEscapement', 'extendBool')
             if extendBoolAttrib:
-                extendBool = True if strtobool(extendBoolAttrib.value) == 1 else False
+                extendBool = True if str_to_bool(extendBoolAttrib.value) == 1 else False
 
             numTeeth = '15'
 
@@ -109,7 +120,7 @@ class commandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             lighteningBool = True
             lighteningBoolAttrib = des.attributes.itemByName('LeverEscapement', 'lighteningBool')
             if lighteningBoolAttrib:
-                lighteningBool = True if strtobool(lighteningBoolAttrib.value) == 1 else False
+                lighteningBool = True if str_to_bool(lighteningBoolAttrib.value) == 1 else False
 
             wallThickness = '0.2'
             wallThicknessAttrib = des.attributes.itemByName('LeverEscapement', 'wallThickness')
@@ -430,9 +441,64 @@ class commandInputChangedHandler(adsk.core.InputChangedEventHandler):
 
 class Points:
     def __init__(self):
-        self.__transform = adsk.core.Matrix3D.create()
-        self.__normal = adsk.core.Vector3D.create(0, 0, 1)
         pass
+
+
+class Utilites:
+    def __init__(self):
+        pass
+
+    def __getComponentByName(self, component, name):
+        if component.name == name:
+            return component
+
+        for child in component.occurrences:
+            found = self.__getComponentByName(child.component, name)
+            if found:
+                return found
+
+        return None
+
+    def getComponentByName(self, design, name):
+        component = design.rootComponent
+        return self.__getComponentByName(component, name)
+
+    def createComponent(self, design):
+        occs = design.rootComponent.occurrences
+        occ = occs.addNewComponent(adsk.core.Matrix3D.create())
+        comp = adsk.fusion.Component.cast(occ.component)
+        return comp
+
+    def createComponentToParent(self, parentComp):
+        occs = parentComp.occurrences
+        occ = occs.addNewComponent(adsk.core.Matrix3D.create())
+        comp = adsk.fusion.Component.cast(occ.component)
+        return comp
+
+    def createSketch(self, component, planeParam):
+        if planeParam == 'X-Y plane':
+            sketchPlane = component.xYConstructionPlane
+        elif planeParam == 'X-Z plane':
+            sketchPlane = component.xZConstructionPlane
+        elif planeParam == 'Y-Z plane':
+            sketchPlane = component.yZConstructionPlane
+
+        sketch = component.sketches.add(sketchPlane)
+        return sketch
+
+    def getPlaneNormal(self, planeParam):
+        if planeParam == 'X-Y plane':
+            normal = adsk.core.Vector3D.create(0, 0, 1)
+        elif planeParam == 'X-Z plane':
+            normal = adsk.core.Vector3D.create(0, -1, 0)
+        elif planeParam == 'Y-Z plane':
+            normal = adsk.core.Vector3D.create(-1, 0, 0)
+
+        return normal
+
+    def getWorldNormal(self, sketch, normal):
+        normal.transformBy(sketch.transform)
+        return normal
 
     def addVectors(self, vector1, vector2):
         x = vector1.x + vector2.x
@@ -447,7 +513,6 @@ class Points:
 
         midPoint = startPoint.copy()
         midPoint.translateBy(vectorStoE)
-
         return midPoint
 
     def getIntersectionPoint(self, point1, point2, point3, point4):
@@ -462,7 +527,6 @@ class Points:
             vector1toInts.scaleBy(scalar)
             intersectionPoint = point1.copy()
             intersectionPoint.translateBy(vector1toInts)
-
             return intersectionPoint
         else:
             None
@@ -479,7 +543,6 @@ class Points:
 
         projectedPoint = lineStart.copy()
         projectedPoint.translateBy(vector)
-
         return projectedPoint
 
     def getLineSymmetryPoint(self, sourcePoint, lineStart, lineEnd):
@@ -488,7 +551,6 @@ class Points:
 
         symmetryPoint = projectedPoint.copy()
         symmetryPoint.translateBy(vector)
-
         return symmetryPoint
 
     def getThreePointsAngle(self, startPoint, vertexPoint, endPoint):
@@ -497,7 +559,6 @@ class Points:
 
         angle = vectorVtoS.dotProduct(vectorVtoE) / (vectorVtoS.length*vectorVtoE.length)
         angle = math.degrees(math.acos(angle))
-
         return angle
 
 
@@ -536,6 +597,7 @@ class CommonDrawingPrameters:
     def getBankingPinOffsetForExtension(self):
         return self.__bankingPinOffsetForExtension
 
+
 class WheelAndPallet(CommonDrawingPrameters):
     def __init__(self,
                  numTeeth,
@@ -557,74 +619,49 @@ class WheelAndPallet(CommonDrawingPrameters):
         self.__innerDiamForLightening = self.getArborHoleDiam() + self.__wallThicknessForLightening*2
 
         self.__points = Points()
+        self.__utils = Utilites()
         self.__getPointsForDrawing()
 
     def draw(self):
-        self.createSketches()
+        self.createWheelComponent()
+        self.createPalletComponent()
+        self.createWheelSketch()
+        self.createPalletSketch()
         self.drawWheelConstructions()
         self.drawWheel()
         self.drawPalletConstructions()
         self.drawPallet()
 
-    def createSketches(self):
-        # Get occurences in the root component.
-        design = self.getDesign()
-        self.__occs = design.rootComponent.occurrences
-
-        # Add new components to the occurences.
-        self.__wheelOcc = self.__occs.addNewComponent(adsk.core.Matrix3D.create())
-        self.__palletOcc = self.__occs.addNewComponent(adsk.core.Matrix3D.create())
-
-        # Get objects of new compornents.
-        self.__wheelComp = adsk.fusion.Component.cast(self.__wheelOcc.component)
-        self.__palletComp = adsk.fusion.Component.cast(self.__palletOcc.component)
-
+    def createWheelComponent(self):
+        self.__wheelComp = self.__utils.createComponent(self.getDesign())
         if self.__lighteningBool:
-            self.__wheelComp.name = 'EscapeWheel' + '_diam' + str(round(self.__lockingDiam*10,2)) + '_wall' + str(round(self.__wallThicknessForLightening*10,2))
+            self.__wheelComp.name = 'EscapeWheel' + '_lockingDiam' + str(round(self.__lockingDiam*10,2)) + '_wallThickness' + str(round(self.__wallThicknessForLightening*10,2))
         else:
-            self.__wheelComp.name = 'EscapeWheel' + '_diam' + str(round(self.__lockingDiam*10,2))
+            self.__wheelComp.name = 'EscapeWheel' + '_lockingDiam' + str(round(self.__lockingDiam*10,2))
 
+    def createPalletComponent(self):
+        self.__palletForkComp = self.__utils.getComponentByName(self.getDesign(), 'PalletFork') or self.__utils.createComponent(self.getDesign())
+        self.__palletForkComp.name = 'PalletFork'
+
+        self.__palletComp = self.__utils.createComponentToParent(self.__palletForkComp)
         if self.getExtendBool():
-            self.__palletComp.name = 'Pallet' + '_extended_angle' + str(round(self.getBankingPinOffsetForExtension(),2))
+            self.__palletComp.name = 'Pallet' + '_extendedSwingAngle' + str(round(self.getBankingPinOffsetForExtension(),2))
         else:
             self.__palletComp.name = 'Pallet'
 
-        # Create new sketches in each component.
-        plane = self.getPlane()
-        if plane == 'X-Y plane':
-            wheelSketchPlane = self.__wheelComp.xYConstructionPlane
-            palletSketchPlane = self.__palletComp.xYConstructionPlane
-            self.__wheelNormal = adsk.core.Vector3D.create(0, 0, 1)
-            self.__palletNormal = adsk.core.Vector3D.create(0, 0, 1)
-        elif plane == 'X-Z plane':
-            wheelSketchPlane = self.__wheelComp.xZConstructionPlane
-            palletSketchPlane = self.__palletComp.xZConstructionPlane
-            self.__wheelNormal = adsk.core.Vector3D.create(0, -1, 0)
-            self.__palletNormal = adsk.core.Vector3D.create(0, -1, 0)
-        elif plane == 'Y-Z plane':
-            wheelSketchPlane = self.__wheelComp.yZConstructionPlane
-            palletSketchPlane = self.__palletComp.yZConstructionPlane
-            self.__wheelNormal = adsk.core.Vector3D.create(-1, 0, 0)
-            self.__palletNormal = adsk.core.Vector3D.create(-1, 0, 0)
+    def createWheelSketch(self):
+        self.__wheelConstructionSketch = self.__utils.createSketch(self.__wheelComp, self.getPlane())
+        self.__wheelSketch = self.__utils.createSketch(self.__wheelComp, self.getPlane())
+        self.__wheelConstructionSketch.name = 'Constructions'
+        self.__wheelSketch.name = 'Escape wheel'
+        self.__wheelConstructionSketch.isVisible = False
 
-        self.__wheelBaseSketch = self.__wheelComp.sketches.add(wheelSketchPlane)
-        self.__palletBaseSketch =  self.__palletComp.sketches.add(palletSketchPlane)
-        self.__wheelSketch = self.__wheelComp.sketches.add(wheelSketchPlane)
-        self.__palletSketch =  self.__palletComp.sketches.add(palletSketchPlane)
-
-        self.__wheelBaseSketch.name = 'constructions'
-        self.__palletBaseSketch.name = 'constructions'
-        self.__wheelSketch.name = 'escape wheel'
-        self.__palletSketch.name = 'pallet'
-
-        self.__wheelBaseSketch.isVisible = False
-        self.__palletBaseSketch.isVisible = False
-
-        # Define a normal vector for rotation.
-        # self.__wheelNormal = self.__wheelBaseSketch.referencePlane.geometry.normal
-        # self.__palletNormal = self.__palletBaseSketch.referencePlane.geometry.normal
-        self.__wheelNormal.transformBy(self.__wheelBaseSketch.transform)
-        self.__palletNormal.transformBy(self.__wheelBaseSketch.transform)
+    def createPalletSketch(self):
+        self.__palletConstructionSketch = self.__utils.createSketch(self.__palletComp, self.getPlane())
+        self.__palletSketch = self.__utils.createSketch(self.__palletComp, self.getPlane())
+        self.__palletConstructionSketch.name = 'Constructions'
+        self.__palletSketch.name = 'Pallet'
+        self.__palletConstructionSketch.isVisible = False
 
     def getArborDistance(self):
         return (self.__lockingDiam/2.0)/math.cos(math.radians(30.0))
@@ -681,7 +718,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         self.__points.L = self.__points.A.copy()
         self.__points.L.translateBy(vector)
 
-        angle = self.__points.getThreePointsAngle(self.__points.E, self.__points.O, self.__points.L)
+        angle = self.__utils.getThreePointsAngle(self.__points.E, self.__points.O, self.__points.L)
         transform.setToRotation(math.radians(10+angle), normal, self.__points.O)
         self.__points.__G = self.__points.L.copy()
         self.__points.__G.transformBy(transform) # temporary G
@@ -706,7 +743,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         self.__points.a = self.__points.A.copy()
         self.__points.a.translateBy(vector)
 
-        self.__points.J = self.__points.getIntersectionPoint(self.__points.A, self.__points.T, self.__points.F, self.__points.a)
+        self.__points.J = self.__utils.getIntersectionPoint(self.__points.A, self.__points.T, self.__points.F, self.__points.a)
 
         transform.setToRotation(math.radians(-7), normal, self.__points.A)
         self.__points.M = self.__points.B.copy()
@@ -722,7 +759,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         self.__points.N = self.__points.A.copy()
         self.__points.N.translateBy(vector)
 
-        self.__points.V = self.__points.getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.M)
+        self.__points.V = self.__utils.getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.M)
 
         transform.setToRotation(math.radians(10), normal, self.__points.O)
         self.__points.P = self.__points.V.copy()
@@ -731,7 +768,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         self.__points.__P = self.__points.D.copy()
         self.__points.__P.transformBy(transform) # for construction drawing
 
-        self.__points.R = self.__points.getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.B)
+        self.__points.R = self.__utils.getIntersectionPoint(self.__points.O, self.__points.D, self.__points.A, self.__points.B)
 
         transform.setToRotation(math.radians(90), normal, self.__points.R)
         scalar = self.__points.R.vectorTo(self.__points.B).length*1.5
@@ -743,14 +780,14 @@ class WheelAndPallet(CommonDrawingPrameters):
         self.__points.W.translateBy(vector)
 
         transform.setToRotation(math.radians(-13.5), normal, self.__points.R)
-        self.__points.__W = self.__points.getLineSymmetryPoint(self.__points.W, self.__points.O, self.__points.D)
+        self.__points.__W = self.__utils.getLineSymmetryPoint(self.__points.W, self.__points.O, self.__points.D)
         self.__points.__W.transformBy(transform)
 
         transform.setToRotation(math.radians(2), normal, self.__points.O)
         self.__points.__Q = self.__points.D.copy()
         self.__points.__Q.transformBy(transform) # temporary Q
 
-        self.__points.Q = self.__points.getIntersectionPoint(self.__points.R, self.__points.__W, self.__points.__Q, self.__points.O)
+        self.__points.Q = self.__utils.getIntersectionPoint(self.__points.R, self.__points.__W, self.__points.__Q, self.__points.O)
 
         transform.setToRotation(math.radians(-24), normal, self.__points.R)
         self.__points.X = self.__points.A.copy()
@@ -800,12 +837,12 @@ class WheelAndPallet(CommonDrawingPrameters):
             self.__points.__extP = self.__points.__P.copy()
             self.__points.__extP.transformBy(transform)
 
-            angle = self.__points.getThreePointsAngle(self.__points.__P, self.__points.P, self.__points.ZA)
+            angle = self.__utils.getThreePointsAngle(self.__points.__P, self.__points.P, self.__points.ZA)
             transform.setToRotation(math.radians(180-angle), normal, self.__points.P)
             self.__points.expP = self.__points.__P.copy()
             self.__points.expP.transformBy(transform)
 
-            self.__points.extP = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extP, self.__points.P, self.__points.expP)
+            self.__points.extP = self.__utils.getIntersectionPoint(self.__points.O, self.__points.__extP, self.__points.P, self.__points.expP)
 
             vector = self.__points.P.vectorTo(self.__points.extP)
             self.__points.extQ = self.__points.Q.copy()
@@ -820,14 +857,14 @@ class WheelAndPallet(CommonDrawingPrameters):
             self.__points.__ZC = self.__points.ZC.copy()
             self.__points.__ZC.transformBy(transform)
 
-            self.__points.extF = self.__points.getIntersectionPoint(self.__points.O, self.__points.__extF, self.__points.ZC, self.__points.__ZC)
+            self.__points.extF = self.__utils.getIntersectionPoint(self.__points.O, self.__points.__extF, self.__points.ZC, self.__points.__ZC)
 
             vector = self.__points.F.vectorTo(self.__points.extF)
             self.__points.extJ = self.__points.J.copy()
             self.__points.extJ.translateBy(vector)
 
     def drawWheelConstructions(self):
-        sketch = self.__wheelBaseSketch
+        sketch = self.__wheelConstructionSketch
 
         lineAO = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.O)
         lineAO.isConstruction = True
@@ -919,7 +956,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         teethRootCircle.isConstruction = True
 
     def drawPalletConstructions(self):
-        sketch = self.__palletBaseSketch
+        sketch = self.__palletConstructionSketch
 
         palletArborCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.O, self.getArborHoleDiam()/2)
         palletArborCircle.isConstruction = True
@@ -956,14 +993,11 @@ class WheelAndPallet(CommonDrawingPrameters):
 
     def drawWheel(self):
         sketch = self.__wheelSketch
+        normal = self.__utils.getPlaneNormal(self.getPlane())
+        normal = self.__utils.getWorldNormal(sketch, normal)
 
         transform = adsk.core.Matrix3D.create()
-        normal = self.__wheelNormal
         points = Points()
-
-        # Locking circle
-        wheelLockingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__lockingDiam/2)
-        wheelLockingCircle.isConstruction = True
 
         # Wheel arbor
         wheelArborHole  = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.getArborHoleDiam()/2)
@@ -1048,10 +1082,10 @@ class WheelAndPallet(CommonDrawingPrameters):
                 originLineForArc = inputEntities.item(0)
                 copiedLineForArc = copiedSketchLine[1]
 
-                angle = points.getThreePointsAngle(originLineForArc.geometry.startPoint, self.__points.A, copiedLineForArc.geometry.startPoint)
+                angle = self.__utils.getThreePointsAngle(originLineForArc.geometry.startPoint, self.__points.A, copiedLineForArc.geometry.startPoint)
                 innerLighteningArc = sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.startPoint, math.radians(angle))
 
-                angle = points.getThreePointsAngle(originLineForArc.geometry.endPoint, self.__points.A, copiedLineForArc.geometry.endPoint)
+                angle = self.__utils.getThreePointsAngle(originLineForArc.geometry.endPoint, self.__points.A, copiedLineForArc.geometry.endPoint)
                 otuerLighteningArc = sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.A, originLineForArc.geometry.endPoint, math.radians(angle))
 
                 if i == 3:
@@ -1062,11 +1096,16 @@ class WheelAndPallet(CommonDrawingPrameters):
                     inputEntities.add(copiedSketchLine[0])
                     inputEntities.add(copiedSketchLine[1])
 
+        # Construction for wheel locking diameter
+        wheelLockingCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.__lockingDiam/2)
+        wheelLockingCircle.isConstruction = True
+
     def drawPallet(self):
         sketch = self.__palletSketch
+        normal = self.__utils.getPlaneNormal(self.getPlane())
+        normal = self.__utils.getWorldNormal(sketch, normal)
 
         transform = adsk.core.Matrix3D.create()
-        normal = self.__palletNormal
         points = Points()
 
         # Pallet arbor
@@ -1107,7 +1146,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         points.zb = lineQZB.geometry.intersectWithCurve(outerCircleToEntryPallet.geometry).item(0)
 
         point = innerArcToEntryPallet.geometry.center
-        angle = points.getThreePointsAngle(points.ze, point, points.zb)
+        angle = self.__utils.getThreePointsAngle(points.ze, point, points.zb)
         outerArcToEntryPallet = sketch.sketchCurves.sketchArcs.addByCenterStartSweep(point, points.ze, math.radians(angle))
 
         outerCircleToEntryPallet.deleteMe()
@@ -1171,7 +1210,7 @@ class WheelAndPallet(CommonDrawingPrameters):
         points.zd = lineJZD.geometry.intersectWithCurve(outerCircleToExitPallet.geometry).item(0)
 
         point = innerArcToExitPallet.geometry.center
-        angle = points.getThreePointsAngle(points.zf, point, points.zd)
+        angle = self.__utils.getThreePointsAngle(points.zf, point, points.zd)
         outerArcToExitPallet = sketch.sketchCurves.sketchArcs.addByCenterStartSweep(point, points.zf, -math.radians(angle))
 
         outerCircleToExitPallet.deleteMe()
@@ -1224,7 +1263,7 @@ class WheelAndPallet(CommonDrawingPrameters):
             lineExtOF.isConstruction = True
 
         # Ohters
-        angle = points.getThreePointsAngle(self.__points.ZE, self.__points.O, self.__points.ZF)
+        angle = self.__utils.getThreePointsAngle(self.__points.ZE, self.__points.O, self.__points.ZF)
         sketch.sketchCurves.sketchArcs.addByCenterStartSweep(self.__points.O, self.__points.ZE, math.radians(angle))
 
 
@@ -1249,67 +1288,46 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__forkSlotOffset = 0.01 # 0.1[mm]
 
         self.__points = Points()
+        self.__utils = Utilites()
         self.__getPointsForDrawing()
 
     def draw(self):
-        self.createSketches()
+        self.createLeverComponent()
+        self.createRollerComponent()
+        self.createLeverSketch()
+        self.createRollerSketch()
         self.drawLeverConstructions()
         self.drawLever()
         self.drawRollerConstructions()
         self.drawRoller()
 
-    def createSketches(self):
-        # Get occurences in the root component.
-        design = self.getDesign()
-        self.__occs = design.rootComponent.occurrences
+    def createLeverComponent(self):
+        self.__palletForkComp = self.__utils.getComponentByName(self.getDesign(), 'PalletFork')
 
-        # Add new components to the occurences.
-        self.__leverOcc = self.__occs.addNewComponent(adsk.core.Matrix3D.create())
-        self.__rollerOcc = self.__occs.addNewComponent(adsk.core.Matrix3D.create())
+        self.__leverComp = self.__utils.createComponentToParent(self.__palletForkComp)
+        self.__leverComp.name = 'Lever' + '_arborDist' + str(round(self.__arborDistLeverToRoller*10,2)) +'_width' + str(round(self.getLeverWidth()*10,2)) + '_swingAngleRaito' + str(self.__swingAngleRaitoRollerToLever)
 
-        # Get objects of new compornents.
-        self.__leverComp = adsk.fusion.Component.cast(self.__leverOcc.component)
-        self.__rollerComp = adsk.fusion.Component.cast(self.__rollerOcc.component)
+    def createRollerComponent(self):
+        self.__rollerComp = self.__utils.createComponent(self.getDesign())
+        self.__rollerComp.name = 'SafetyRoller'+ '_pinAngle' + str(round(self.__impulsePinAngle,2)) + '_diamRaito' + str(self.__diamRaitoImpulsePinOrbitToSafetyRoller)
 
-        self.__leverComp.name = 'Lever' + '_dist' + str(round(self.__arborDistLeverToRoller*10,2)) +'_width' + str(round(self.getLeverWidth()*10,2)) + '_raito' + str(self.__swingAngleRaitoRollerToLever)
-        self.__rollerComp.name = 'SafetyRoller'+ '_angle' + str(round(self.__impulsePinAngle,2)) + '_raito' + str(self.__diamRaitoImpulsePinOrbitToSafetyRoller)
+    def createLeverSketch(self):
+        self.__leverConstructionSketch = self.__utils.createSketch(self.__leverComp, self.getPlane())
+        self.__leverSketch = self.__utils.createSketch(self.__leverComp, self.getPlane())
+        self.__leverConstructionSketch.name = 'Constructions'
+        self.__leverSketch.name = 'Lever'
+        self.__leverConstructionSketch.isVisible = False
+        self.__leverNormal = self.__utils.getPlaneNormal(self.getPlane())
+        self.__leverNormal.transformBy(self.__leverSketch.transform)
 
-        # Create new sketches in each component.
-        plane = self.getPlane()
-        if plane == 'X-Y plane':
-            leverSketchPlane = self.__leverComp.xYConstructionPlane
-            rollerSketchPlane = self.__rollerComp.xYConstructionPlane
-            self.__leverNormal = adsk.core.Vector3D.create(0, 0, 1)
-            self.__rollerNormal = adsk.core.Vector3D.create(0, 0, 1)
-        elif plane == 'X-Z plane':
-            leverSketchPlane = self.__leverComp.xZConstructionPlane
-            rollerSketchPlane = self.__rollerComp.xZConstructionPlane
-            self.__leverNormal = adsk.core.Vector3D.create(0, -1, 0)
-            self.__rollerNormal = adsk.core.Vector3D.create(0, -1, 0)
-        elif plane == 'Y-Z plane':
-            leverSketchPlane = self.__leverComp.yZConstructionPlane
-            rollerSketchPlane = self.__rollerComp.yZConstructionPlane
-            self.__leverNormal = adsk.core.Vector3D.create(-1, 0, 0)
-            self.__rollerNormal = adsk.core.Vector3D.create(-1, 0, 0)
-
-        self.__leverBaseSketch = self.__leverComp.sketches.add(leverSketchPlane)
-        self.__rollerBaseSketch = self.__rollerComp.sketches.add(rollerSketchPlane)
-        self.__leverSketch =  self.__leverComp.sketches.add(leverSketchPlane)
-        self.__rollerSketch = self.__rollerComp.sketches.add(rollerSketchPlane)
-
-        self.__leverBaseSketch.name = 'constructions'
-        self.__rollerBaseSketch.name = 'constructions'
-        self.__leverSketch.name = 'lever'
-        self.__rollerSketch.name = 'safety roller'
-
-        self.__leverBaseSketch.isVisible = False
-        self.__rollerBaseSketch.isVisible = False
-
-        # Define a normal vector for rotation.
-        # self.__leverNormal = self.__leverBaseSketch.referencePlane.geometry.normal
-        # self.__rollerNormal = self.__rollerBaseSketch.referencePlane.geometry.normal
-        self.__leverNormal.transformBy(self.__leverBaseSketch.transform)
-        self.__rollerNormal.transformBy(self.__rollerBaseSketch.transform)
+    def createRollerSketch(self):
+        self.__rollerConstructionSketch = self.__utils.createSketch(self.__rollerComp, self.getPlane())
+        self.__rollerSketch = self.__utils.createSketch(self.__rollerComp, self.getPlane())
+        self.__rollerConstructionSketch.name = 'Constructions'
+        self.__rollerSketch.name = 'Safety Roller'
+        self.__rollerConstructionSketch.isVisible = False
+        self.__rollerNormal = self.__utils.getPlaneNormal(self.getPlane())
+        self.__rollerNormal.transformBy(self.__rollerSketch.transform)
 
     def getImpulsePinOrbitDiameter(self):
         return self.__points.A.vectorTo(self.__points.D).length*2
@@ -1344,7 +1362,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.C = self.__points.O.copy()
         self.__points.C.transformBy(transform)
 
-        self.__points.D = self.__points.getIntersectionPoint(self.__points.O, self.__points.B, self.__points.A, self.__points.C)
+        self.__points.D = self.__utils.getIntersectionPoint(self.__points.O, self.__points.B, self.__points.A, self.__points.C)
 
         transform.setToRotation(math.radians(-self.__rollerSwingAngle/2), normal, self.__points.A)
         self.__points.E = self.__points.A.copy()
@@ -1355,7 +1373,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.F = self.__points.E.copy()
         self.__points.F.transformBy(transform)
 
-        self.__points.G = self.__points.getPerpendicularProjectedPoint(self.__points.E, self.__points.A, self.__points.F)
+        self.__points.G = self.__utils.getPerpendicularProjectedPoint(self.__points.E, self.__points.A, self.__points.F)
 
         transform.setToRotation(math.radians(90), normal, self.__points.E)
         vector = self.__points.E.vectorTo(self.__points.B)
@@ -1382,9 +1400,9 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.K = self.__points.H.copy()
         self.__points.K.translateBy(vector)
 
-        self.__points.L = self.__points.getLineSymmetryPoint(self.__points.I, self.__points.O, self.__points.B)
-        self.__points.M = self.__points.getLineSymmetryPoint(self.__points.J, self.__points.O, self.__points.B)
-        self.__points.N = self.__points.getLineSymmetryPoint(self.__points.K, self.__points.O, self.__points.B)
+        self.__points.L = self.__utils.getLineSymmetryPoint(self.__points.I, self.__points.O, self.__points.B)
+        self.__points.M = self.__utils.getLineSymmetryPoint(self.__points.J, self.__points.O, self.__points.B)
+        self.__points.N = self.__utils.getLineSymmetryPoint(self.__points.K, self.__points.O, self.__points.B)
 
         vector = self.__points.O.vectorTo(self.__points.E)
         scalar = vector.length-self.getImpulsePinDiameter()/2-self.getLeverWidth()/2
@@ -1410,9 +1428,9 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.S = self.__points.P.copy()
         self.__points.S.translateBy(vector)
 
-        self.__points.T = self.__points.getLineSymmetryPoint(self.__points.Q.copy(), self.__points.O, self.__points.B)
-        self.__points.U = self.__points.getLineSymmetryPoint(self.__points.R.copy(), self.__points.O, self.__points.B)
-        self.__points.V = self.__points.getLineSymmetryPoint(self.__points.S.copy(), self.__points.O, self.__points.B)
+        self.__points.T = self.__utils.getLineSymmetryPoint(self.__points.Q.copy(), self.__points.O, self.__points.B)
+        self.__points.U = self.__utils.getLineSymmetryPoint(self.__points.R.copy(), self.__points.O, self.__points.B)
+        self.__points.V = self.__utils.getLineSymmetryPoint(self.__points.S.copy(), self.__points.O, self.__points.B)
 
         transform.setToRotation(math.radians(self.__impulsePinAngle/2), normal, self.__points.A)
         self.__points.W = self.__points.E.copy()
@@ -1424,7 +1442,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.X = self.__points.A.copy()
         self.__points.X.translateBy(vector)
 
-        self.__points.Y = self.__points.getLineSymmetryPoint(self.__points.X, self.__points.A, self.__points.E)
+        self.__points.Y = self.__utils.getLineSymmetryPoint(self.__points.X, self.__points.A, self.__points.E)
 
         vector = self.__points.E.vectorTo(self.__points.A)
         vector.normalize()
@@ -1432,9 +1450,9 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.Z = self.__points.E.copy()
         self.__points.Z.translateBy(vector)
 
-        self.__points.ZA = self.__points.getPerpendicularProjectedPoint(self.__points.Z, self.__points.A, self.__points.F)
+        self.__points.ZA = self.__utils.getPerpendicularProjectedPoint(self.__points.Z, self.__points.A, self.__points.F)
 
-        self.__points.ZB = self.__points.getLineSymmetryPoint(self.__points.ZA, self.__points.A, self.__points.E)
+        self.__points.ZB = self.__utils.getLineSymmetryPoint(self.__points.ZA, self.__points.A, self.__points.E)
 
         transform.setToRotation(math.radians(-self.__rollerSwingAngle/2), normal, self.__points.A)
         vector = adsk.core.Vector3D.create(-self.getSafetyRollerDiameter()/2, 0, 0)
@@ -1442,10 +1460,10 @@ class LeverAndRoller(CommonDrawingPrameters):
         self.__points.ZC = self.__points.A.copy()
         self.__points.ZC.translateBy(vector)
 
-        self.__points.ZD = self.__points.getLineSymmetryPoint(self.__points.ZC, self.__points.A, self.__points.E)
+        self.__points.ZD = self.__utils.getLineSymmetryPoint(self.__points.ZC, self.__points.A, self.__points.E)
 
     def drawLeverConstructions(self):
-        sketch = self.__leverBaseSketch
+        sketch = self.__leverConstructionSketch
 
         leverRootcircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.O, self.getLeverWidth()/2)
         leverRootcircle.isConstruction = True
@@ -1504,7 +1522,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         lineAW.isConstruction = True
 
     def drawRollerConstructions(self):
-        sketch = self.__rollerBaseSketch
+        sketch = self.__rollerConstructionSketch
 
         lineAO = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.A, self.__points.O)
         lineAO.isConstruction = True
@@ -1549,16 +1567,17 @@ class LeverAndRoller(CommonDrawingPrameters):
 
     def drawLever(self):
         sketch = self.__leverSketch
+        normal = self.__utils.getPlaneNormal(self.getPlane())
+        normal = self.__utils.getWorldNormal(sketch, normal)
 
         transform = adsk.core.Matrix3D.create()
-        normal = self.__leverNormal
         points = Points()
 
         # Fork slot
         impulsePinOrbitCircle = sketch.sketchCurves.sketchCircles.addByCenterRadius(self.__points.A, self.getImpulsePinOrbitDiameter()/2)
         lineJK = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.J, self.__points.K)
         points.k = lineJK.geometry.intersectWithCurve(impulsePinOrbitCircle.geometry).item(0)
-        points.n = points.getLineSymmetryPoint(points.k, self.__points.O, self.__points.B)
+        points.n = self.__utils.getLineSymmetryPoint(points.k, self.__points.O, self.__points.B)
 
         sketch.sketchCurves.sketchLines.addByTwoPoints(points.k, self.__points.J)
         sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.J, self.__points.M)
@@ -1610,7 +1629,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         vector1.transformBy(transform)
         point1 = self.__points.S.copy()
         point1.translateBy(vector1)
-        angle = 10 if point1.vectorTo(points.getLineSymmetryPoint(point1, self.__points.O, self.__points.B)).length >= self.getForkPointWidth() else 20
+        angle = 10 if point1.vectorTo (self.__utils.getLineSymmetryPoint(point1, self.__points.O, self.__points.B)).length >= self.getForkPointWidth() else 20
         transform.setToRotation(math.radians(angle), normal, self.__points.S)
         vector2 = self.__points.J.vectorTo(points.k)
         vector2.transformBy(transform)
@@ -1653,7 +1672,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         lineba = sketch.sketchCurves.sketchLines.addByTwoPoints(points.b, points.a)
         lineMN = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.M, self.__points.N)
         points.b2 = lineba.geometry.intersectWithCurve(lineMN.geometry).item(0)
-        points.b3 = points.getLineSymmetryPoint(points.b2, self.__points.O, self.__points.B)
+        points.b3 = self.__utils.getLineSymmetryPoint(points.b2, self.__points.O, self.__points.B)
 
         sketch.sketchCurves.sketchLines.addByTwoPoints(points.b, points.b2)
         sketch.sketchCurves.sketchLines.addByTwoPoints(points.b, points.b3)
@@ -1669,7 +1688,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         lineOB.deleteMe()
         lineMN.deleteMe()
 
-        # Construction for banking pin
+        # Constructions for banking pin
         transform.setToRotation(math.radians(self.getBankingPinOffset()), normal, self.__points.O)
         point1 = self.__points.Q.copy()
         point1.transformBy(transform)
@@ -1704,11 +1723,19 @@ class LeverAndRoller(CommonDrawingPrameters):
             lineForExitSideBankingPin = sketch.sketchCurves.sketchLines.addByTwoPoints(point1, point2)
             lineForExitSideBankingPin.isConstruction = True
 
+        # Constructions for arbor distance, lever swing angle
+        lineForArborDistances = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.A)
+        lineForArborDistances.isConstruction = True
+
+        lineForLeverSwingAngle = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.O, self.__points.D)
+        lineForLeverSwingAngle.isConstruction = True
+
     def drawRoller(self):
         sketch = self.__rollerSketch
+        normal = self.__utils.getPlaneNormal(self.getPlane())
+        normal = self.__utils.getWorldNormal(sketch, normal)
 
         transform = adsk.core.Matrix3D.create()
-        normal = self.__rollerNormal
         points = Points()
 
         # Roller arbor
@@ -1723,7 +1750,7 @@ class LeverAndRoller(CommonDrawingPrameters):
         lineOB.deleteMe()
 
         point = self.__points.X.copy()
-        point = points.getPerpendicularProjectedPoint(point, self.__points.A, self.__points.E)
+        point = self.__utils.getPerpendicularProjectedPoint(point, self.__points.A, self.__points.E)
         scalar = self.__points.E.vectorTo(points.b).length-(self.getImpulsePinOrbitDiameter()/2-self.getSafetyRollerDiameter()/2) # in-crescent guard pin length
         vector = point.vectorTo(self.__points.A)
         vector.normalize()
@@ -1750,5 +1777,17 @@ class LeverAndRoller(CommonDrawingPrameters):
         point.translateBy(vector)
         impulsePinToRollerFaceLeft = sketch.sketchCurves.sketchArcs.addByThreePoints(self.__points.ZC, point, self.__points.ZA)
 
-        point = self.__points.getLineSymmetryPoint(point, self.__points.A, self.__points.E)
+        point = self.__utils.getLineSymmetryPoint(point, self.__points.A, self.__points.E)
         impulsePinToRollerFaceRight = sketch.sketchCurves.sketchArcs.addByThreePoints(self.__points.ZD, point, self.__points.ZB)
+
+        # Constructions for impulse pin, safety roller diameter and swing angle
+        lineForimpulsePinFaceLeft = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.F, self.__points.A)
+        lineForimpulsePinFaceLeft.isConstruction = True
+        lineForimpulsePinFaceRight = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.W, self.__points.A)
+        lineForimpulsePinFaceRight.isConstruction = True
+
+        lineForSafetyRollerDiamRaito = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.X, self.__points.A)
+        lineForSafetyRollerDiamRaito.isConstruction = True
+
+        lineForRollerSwingAngle = sketch.sketchCurves.sketchLines.addByTwoPoints(self.__points.D, self.__points.A)
+        lineForRollerSwingAngle.isConstruction = True
